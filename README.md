@@ -69,3 +69,59 @@ flowchart TD
     P & D & L --> DA[De-identification Agent]
     DA --> PA[Publisher Agent]
     PA --> R[Researchers / Platforms]
+
+
+
+🛠 Tech Stack
+
+Fetch.ai uAgents — autonomous agent framework
+
+Presidio — HIPAA identifier removal
+
+ASI (SingularityNET) — only in De-identification Agent
+
+Ethereum (x402 protocol) — secure payments & access control
+
+Superbase — backend storage (supporting layer)
+
+🌍 Impact
+
+Patients: frustration-free, faster care navigation.
+
+Doctors & Labs: unified scheduling, automated workflows.
+
+Researchers: privacy-preserving datasets for innovation.
+
+Ecosystem: health records become secure, research-ready assets.
+
+🛤 Roadmap
+
+✅ Core agents (Patient, Doctor, Lab, De-identification, Publisher)
+
+✅ Payments via x402
+
+🔄 Monetization layer for patients/doctors (future)
+
+🔄 Telemedicine support in Doctor Agent (future)
+
+🔄 Expanded data marketplace (future)
+
+📦 Project Status
+
+Current: Prototype / Proof-of-Concept
+
+Built for ETH Hackathon (ASI Track, Fetch.ai ecosystem)
+
+🤝 Contributing
+
+Fork the repo
+
+Create a feature branch
+
+Commit changes
+
+Submit a PR
+
+📜 License
+
+Licensed under MIT License. See LICENSE for details.
