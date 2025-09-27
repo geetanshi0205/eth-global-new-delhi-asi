@@ -9,11 +9,11 @@ load_dotenv()
 # Create an MCP adapter with your MCP server
 mcp_adapter = MCPServerAdapter(
     mcp_server=mcp,
-    asi1_api_key=os.getenv("ASI1_API_KEY"),
+    asi1_api_key=os.getenv("ASI_ONE_API_KEY"),
     model="asi1-mini"
 )
 
-agent = Agent(name="Patient Agent", port=8002, seed="Patient Agent ETHGlobal New Delhi", mailbox=True, publish_agent_details=True)
+agent = Agent(name="Patient Agent22", port=8002, seed="Patient Agent ETHGlobal New Delhi2", mailbox=True, publish_agent_details=True)
 
 for protocol in mcp_adapter.protocols:
     agent.include(protocol, publish_manifest=True)

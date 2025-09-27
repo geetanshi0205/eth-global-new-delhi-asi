@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "WebFetch(domain:metta-stdlib.readthedocs.io)",
+      "Bash(mkdir:*)"
     ],
     "deny": [],
     "ask": []

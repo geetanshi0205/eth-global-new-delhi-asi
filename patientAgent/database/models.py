@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, Boolean, Date
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -9,10 +9,21 @@ class Patient(Base):
     __tablename__ = "patients"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
-    name = Column(String, nullable=False)  # Combined name field to match existing schema
-    email = Column(String, index=True)
+    name = Column(String, nullable=False)  # Combined name field
+    first_name = Column(String)
+    last_name = Column(String)
+    email = Column(String, index=True, unique=True)
     phone = Column(String)
-    notes = Column(Text)  # Using notes field from existing schema for additional info
+    date_of_birth = Column(Date)
+    gender = Column(String)
+    address = Column(Text)
+    emergency_contact = Column(String)
+    emergency_phone = Column(String)
+    insurance_info = Column(Text)
+    medical_history = Column(Text)
+    allergies = Column(Text)
+    current_medications = Column(Text)
+    notes = Column(Text)  # Additional notes
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
@@ -26,11 +37,31 @@ class Appointment(Base):
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     patient_id = Column(UUID(as_uuid=True), ForeignKey("patients.id"), nullable=False)
-    doctor_id = Column(String, nullable=False, default="default_doctor")
+    patient_email = Column(String, nullable=False, index=True)  # For quick lookup
+    patient_name = Column(String, nullable=False)
+    appointment_type = Column(String, nullable=False, default="consultation")  # 'doctor' or 'lab'
     appointment_time = Column(DateTime(timezone=True), nullable=False)
-    status = Column(String, default="scheduled")
-    cal_com_event_id = Column(String, index=True)
-    notes = Column(Text)
+    end_time = Column(DateTime(timezone=True))
+    duration_minutes = Column(Integer, default=30)
+    status = Column(String, default="scheduled")  # scheduled, completed, cancelled, no_show
+    cal_com_booking_id = Column(String, index=True)  # Cal.com booking ID
+    cal_com_booking_uid = Column(String, index=True)  # Cal.com booking UID
+    event_type_id = Column(String)  # Which event type was used
+    api_key_used = Column(String)  # Which API key was used (for tracking)
+    doctor_id = Column(String, default="default_doctor")
+    doctor_name = Column(String)
+    lab_name = Column(String)  # For lab appointments
+    location = Column(String)
+    timezone = Column(String, default="Asia/Kolkata")
+    language = Column(String, default="en")
+    notes = Column(Text)  # Patient notes
+    doctor_notes = Column(Text)  # Doctor's notes after appointment
+    diagnosis = Column(Text)  # Diagnosis from appointment
+    symptoms = Column(Text)  # Symptoms reported
+    treatment_plan = Column(Text)  # Treatment plan
+    follow_up_required = Column(Boolean, default=False)
+    follow_up_date = Column(DateTime(timezone=True))
+    urgency_level = Column(String, default="routine")  # emergency, urgent, moderate, routine
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     

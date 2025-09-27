@@ -13,7 +13,7 @@ mcp_adapter = MCPServerAdapter(
     model="asi1-mini"
 )
 
-agent = Agent(name="Doctor Agent", port=8001, seed="Doctor Agent ETHGlobal New Delhi", mailbox=True, publish_agent_details=True)
+agent = Agent(name="Doctor Agent", port=8001, seed="Doctor Agent ETHGlobal New Delhi22", mailbox=True, publish_agent_details=True)
 
 for protocol in mcp_adapter.protocols:
     agent.include(protocol, publish_manifest=True)

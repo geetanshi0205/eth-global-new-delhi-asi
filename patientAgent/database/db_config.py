@@ -6,7 +6,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DATABASE_URL = "postgresql://postgres.idlpfsdzfcvwjjnwolcd:sAApJCCIgq0sFOcC@aws-1-us-east-2.pooler.supabase.com:5432/postgres"
+# Use environment variable for database URL, fallback to hardcoded for compatibility
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

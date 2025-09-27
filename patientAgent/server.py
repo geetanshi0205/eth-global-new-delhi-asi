@@ -1,12 +1,15 @@
-from typing import Any, Optional
+from typing import Any, Optional, List
 import httpx
 import os
 from datetime import datetime, timedelta
 from mcp.server.fastmcp import FastMCP
 from dotenv import load_dotenv
+from hyperon import MeTTa
 
-
-# Knowledge graph components removed
+# MeTTa Knowledge Graph Components
+from metta.patient_rag import PatientRAG
+from metta.knowledge import initialize_patient_knowledge
+from metta.utils import LLM, process_medical_query, format_comprehensive_medical_response, get_patient_specific_insights
 
 # Import database components
 from database.operations import (
@@ -23,6 +26,12 @@ mcp = FastMCP("patient-appointment-manager")
 # Initialize database
 init_database()
 
+# Initialize MeTTa Knowledge Graph
+metta = MeTTa()
+initialize_patient_knowledge(metta)
+patient_rag = PatientRAG(metta)
+llm = LLM(api_key=os.getenv("ASI_ONE_API_KEY"))
+
 CAL_API_V1_BASE = "https://api.cal.com/v1"
 CAL_API_V2_BASE = "https://api.cal.com/v2"
 USER_AGENT = "patient-agent/1.0"
@@ -31,18 +40,45 @@ USER_AGENT = "patient-agent/1.0"
 DEFAULT_TIMEZONE = "Asia/Kolkata"
 DEFAULT_LANGUAGE = "en"
 
+def get_appointment_credentials(appointment_type: str) -> tuple[str, int]:
+    """Get appropriate API key and event type ID based on appointment type"""
+    if appointment_type.lower() in ["doctor", "consultation", "checkup", "medical"]:
+        api_key = os.getenv("CAL_API_KEY_Doc")
+        event_type_id = os.getenv("EVENT_TYPE_I_DOC")
+        
+        if not api_key or not event_type_id:
+            # Fallback to legacy credentials
+            api_key = os.getenv("CAL_API_KEY")
+            event_type_id = os.getenv("EVENT_TYPE_ID")
+            
+    elif appointment_type.lower() in ["lab", "laboratory", "test", "blood_test", "imaging"]:
+        api_key = os.getenv("CAL_API_KEY_Lab")
+        event_type_id = os.getenv("EVENT_TYPE_I_LAB")
+        
+        if not api_key or not event_type_id:
+            # Fallback to legacy credentials
+            api_key = os.getenv("CAL_API_KEY")
+            event_type_id = os.getenv("EVENT_TYPE_ID")
+    else:
+        # Default to doctor credentials for unknown types
+        api_key = os.getenv("CAL_API_KEY_Doc", os.getenv("CAL_API_KEY"))
+        event_type_id = os.getenv("EVENT_TYPE_I_DOC", os.getenv("EVENT_TYPE_ID"))
+    
+    if not api_key or not event_type_id:
+        raise ValueError(f"Missing credentials for appointment type: {appointment_type}")
+    
+    return api_key, int(event_type_id)
+
 def get_default_event_type_id() -> int:
-    """Get default event type ID from environment"""
-    event_type_id = os.getenv("EVENT_TYPE_ID")
+    """Get default event type ID from environment (doctor appointments)"""
+    event_type_id = os.getenv("EVENT_TYPE_I_DOC", os.getenv("EVENT_TYPE_ID"))
     if not event_type_id:
-        raise ValueError("EVENT_TYPE_ID environment variable is required")
+        raise ValueError("Doctor event type ID environment variable is required")
     return int(event_type_id)
 
-def get_cal_headers(api_version: str = "v2") -> dict[str, str]:
-    """Get headers for Cal.com API requests"""
-    api_key = os.getenv("CAL_API_KEY")
-    if not api_key:
-        raise ValueError("CAL_API_KEY environment variable is required")
+def get_cal_headers(api_version: str = "v1", appointment_type: str = "doctor") -> dict[str, str]:
+    """Get headers for Cal.com API requests based on appointment type"""
+    api_key, _ = get_appointment_credentials(appointment_type)
     
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -50,7 +86,7 @@ def get_cal_headers(api_version: str = "v2") -> dict[str, str]:
         "User-Agent": USER_AGENT
     }
     
-    # Only add API version header for v2 API
+    # Only add API version header for v2 API (but we're using v1 as requested)
     if api_version == "v2":
         headers["cal-api-version"] = "2024-08-13"
         
@@ -192,11 +228,11 @@ def format_error_response(error_response: dict, operation: str) -> str:
 
 **For immediate assistance:** Please provide all booking details and try again."""
 
-async def make_cal_request(method: str, endpoint: str, data: Optional[dict] = None, api_version: str = "v2") -> dict[str, Any] | None:
-    """Make authenticated request to Cal.com API"""
+async def make_cal_request(method: str, endpoint: str, data: Optional[dict] = None, api_version: str = "v1", appointment_type: str = "doctor") -> dict[str, Any] | None:
+    """Make authenticated request to Cal.com API with appointment type support"""
     base_url = CAL_API_V2_BASE if api_version == "v2" else CAL_API_V1_BASE
     url = f"{base_url}/{endpoint.lstrip('/')}"
-    headers = get_cal_headers(api_version)
+    headers = get_cal_headers(api_version, appointment_type)
     
     # Debug logging for troubleshooting
     print(f"DEBUG: Making {method} request to {url} (API {api_version})")
@@ -210,7 +246,7 @@ async def make_cal_request(method: str, endpoint: str, data: Optional[dict] = No
             if method.upper() == "GET":
                 if api_version == "v1":
                     # For v1 API, add API key as query parameter
-                    api_key = os.getenv("CAL_API_KEY")
+                    api_key, _ = get_appointment_credentials(appointment_type)
                     if data is None:
                         data = {}
                     data["apiKey"] = api_key
@@ -218,7 +254,7 @@ async def make_cal_request(method: str, endpoint: str, data: Optional[dict] = No
             elif method.upper() == "POST":
                 if api_version == "v1":
                     # For v1 API, add API key as query parameter (like GET requests)
-                    api_key = os.getenv("CAL_API_KEY")
+                    api_key, _ = get_appointment_credentials(appointment_type)
                     url_with_api_key = f"{url}?apiKey={api_key}"
                     # print(f"DEBUG: V1 POST URL with API key: {url_with_api_key}")
                     # print(f"DEBUG: POST body data: {data}")
@@ -263,6 +299,152 @@ End Time: {booking.get('endTime', 'Unknown')}
 Status: {booking.get('status', 'Unknown')}
 Attendees: {', '.join([attendee.get('email', 'Unknown') for attendee in booking.get('attendees', [])])}
 """
+
+@mcp.tool()
+async def book_appointment_with_type(
+    attendee_email: str,
+    attendee_name: str,
+    start_time: str,
+    appointment_type: str = "doctor",
+    event_type_id: Optional[int] = None,
+    attendee_timezone: str = DEFAULT_TIMEZONE,
+    language: str = DEFAULT_LANGUAGE,
+    notes: Optional[str] = None,
+    duration_minutes: Optional[int] = None
+) -> str:
+    """Enhanced appointment booking that supports both doctor and lab appointments with database tracking.
+
+    Args:
+        attendee_email: Email address of the patient
+        attendee_name: Full name of the patient
+        start_time: Start time in ISO format (e.g., "2024-01-15T10:00:00Z")
+        appointment_type: Type of appointment ('doctor', 'lab', 'consultation', 'test', etc.)
+        event_type_id: The ID of the event type (OPTIONAL - automatically uses appropriate default)
+        attendee_timezone: Timezone of the attendee (default: Asia/Kolkata for India)
+        language: Language preference (default: en for English)
+        notes: Optional notes for the appointment
+        duration_minutes: Duration in minutes (OPTIONAL - uses event type default if not provided)
+
+    Note: Automatically uses appropriate credentials based on appointment type:
+    - Doctor appointments: Uses CAL_API_KEY_Doc and EVENT_TYPE_I_DOC
+    - Lab appointments: Uses CAL_API_KEY_Lab and EVENT_TYPE_I_LAB
+    """
+    try:
+        # Get appropriate credentials based on appointment type
+        api_key, default_event_type_id = get_appointment_credentials(appointment_type)
+        
+        if event_type_id is None:
+            event_type_id = default_event_type_id
+        
+        # Convert start_time to proper format for Cal.com API
+        from datetime import datetime, timedelta
+
+        # Parse the start time and add timezone info
+        if "T" not in start_time:
+            start_time = f"{start_time}T00:00:00"
+
+        # Ensure proper timezone handling for Cal.com API
+        if not start_time.endswith('Z') and '+' not in start_time and '-' not in start_time[-6:]:
+            # For IST times, convert to UTC (subtract 5:30)
+            start_dt = datetime.fromisoformat(start_time.replace('Z', ''))
+            start_utc = start_dt - timedelta(hours=5, minutes=30)
+            start_utc_str = start_utc.strftime('%Y-%m-%dT%H:%M:%S.000Z')
+        else:
+            start_utc_str = start_time if start_time.endswith('Z') else f"{start_time}Z"
+
+        # Cal.com v1 API - Let the event type determine duration, don't specify end time
+        booking_data = {
+            "eventTypeId": event_type_id,
+            "start": start_utc_str,
+            "responses": {
+                "name": attendee_name,
+                "email": attendee_email,
+                "location": {
+                    "value": "userPhone",
+                    "optionValue": ""
+                }
+            },
+            "timeZone": attendee_timezone,
+            "language": language
+        }
+        
+        if notes:
+            booking_data["metadata"] = {"notes": notes}
+        
+        # Debug: log booking data to help diagnose issues
+        import json
+        print(f"DEBUG: Booking data being sent: {json.dumps(booking_data, indent=2)}")
+        
+        result = await make_cal_request("POST", "bookings", booking_data, api_version="v1", appointment_type=appointment_type)
+        
+        if result and "error" not in result:
+            booking_id = result.get('id', 'Unknown')
+            booking_uid = result.get('uid', 'Unknown')
+            
+            # Save appointment to database
+            try:
+                # Parse name
+                name_parts = attendee_name.strip().split()
+                first_name = name_parts[0] if name_parts else attendee_name
+                last_name = " ".join(name_parts[1:]) if len(name_parts) > 1 else ""
+
+                # Create/update patient record
+                patient = PatientOperations.get_or_create_patient(
+                    email=attendee_email,
+                    first_name=first_name,
+                    last_name=last_name
+                )
+
+                # Create appointment record in database
+                appointment_date = datetime.fromisoformat(start_utc_str.replace('Z', ''))
+                appointment = AppointmentOperations.create_appointment(
+                    patient_email=attendee_email,
+                    appointment_date=appointment_date,
+                    cal_booking_id=str(booking_id),
+                    appointment_type=appointment_type,
+                    notes=notes,
+                    status="scheduled"
+                )
+                
+                # Update appointment with additional Cal.com data
+                AppointmentOperations.update_appointment(appointment.id, 
+                    cal_com_booking_uid=booking_uid,
+                    event_type_id=str(event_type_id),
+                    api_key_used=api_key[-10:],  # Store last 10 chars for tracking
+                    patient_name=attendee_name,
+                    timezone=attendee_timezone,
+                    language=language
+                )
+                
+                db_status = f"✅ Database updated - Patient ID: {patient.id}, Appointment ID: {appointment.id}"
+                
+            except Exception as db_error:
+                db_status = f"⚠️ Database error: {str(db_error)} (Appointment still booked in Cal.com)"
+            
+            appointment_type_emoji = "👨‍⚕️" if appointment_type.lower() in ["doctor", "consultation", "medical"] else "🧪"
+            
+            return f"""{appointment_type_emoji} **{appointment_type.title()} Appointment Booked Successfully!**
+
+**Booking Details:**
+- Booking ID: {booking_id}
+- Booking UID: {booking_uid}
+- Patient: {attendee_name}
+- Email: {attendee_email}
+- Appointment Type: {appointment_type.title()}
+- Timezone: {attendee_timezone}
+- Language: {language}
+- Start Time: {start_time}
+- Event Type ID: {event_type_id}
+
+**Database Status:**
+{db_status}
+
+**API Used:** {"Doctor API" if appointment_type.lower() in ["doctor", "consultation", "medical"] else "Lab API" if appointment_type.lower() in ["lab", "test", "laboratory"] else "Default API"}"""
+        else:
+            return format_error_response(result or {"error": "Unknown error"}, f"book {appointment_type} appointment")
+            
+    except Exception as e:
+        return f"❌ **Error booking {appointment_type} appointment**: {str(e)}"
 
 @mcp.tool()
 async def book_appointment(
@@ -387,12 +569,13 @@ async def book_appointment_simple(
     )
 
 @mcp.tool()
-async def get_patient_appointments(patient_email: str, limit: int = 10) -> str:
-    """Get list of appointments for a specific patient from database.
+async def get_patient_appointments(patient_email: str, limit: int = 10, appointment_type: Optional[str] = None) -> str:
+    """Get comprehensive list of appointments for a specific patient from database with enhanced details.
 
     Args:
         patient_email: Patient's email address to fetch appointments for
         limit: Maximum number of appointments to return
+        appointment_type: Filter by appointment type ('doctor', 'lab', etc.) - optional
     """
     try:
         # Get patient data with appointments
@@ -404,35 +587,87 @@ async def get_patient_appointments(patient_email: str, limit: int = 10) -> str:
         patient = data["patient"]
         appointments = data["appointments"]
 
+        # Filter by appointment type if specified
+        if appointment_type:
+            appointments = [apt for apt in appointments if apt.get('appointment_type', '').lower() == appointment_type.lower()]
+
         if not appointments:
+            filter_text = f" for {appointment_type} appointments" if appointment_type else ""
             return f"""📅 **No Appointments Found**
 
 **Patient:** {patient['name']} ({patient_email})
 
-This patient has no appointment history in our system."""
+This patient has no appointment history{filter_text} in our system."""
 
         # Sort appointments by date (most recent first)
         appointments.sort(key=lambda x: x['date'], reverse=True)
 
-        response = f"""📅 **Appointment History for {patient['name']}**
+        # Count appointments by type
+        doctor_count = len([apt for apt in appointments if apt.get('appointment_type', '').lower() in ['doctor', 'consultation', 'medical']])
+        lab_count = len([apt for apt in appointments if apt.get('appointment_type', '').lower() in ['lab', 'laboratory', 'test']])
+
+        response = f"""📅 **Comprehensive Appointment History for {patient['name']}**
 **Email:** {patient_email}
 **Total Appointments:** {len(appointments)}
+👨‍⚕️ **Doctor Appointments:** {doctor_count}
+🧪 **Lab Appointments:** {lab_count}
+{f"**Filtered by:** {appointment_type.title()}" if appointment_type else ""}
 
 """
 
-        # Show limited number of appointments
+        # Show limited number of appointments with enhanced details
         for i, apt in enumerate(appointments[:limit]):
+            # Status emoji
             status_emoji = "✅" if apt['status'] == "completed" else "📅" if apt['status'] == "scheduled" else "❌" if apt['status'] == "cancelled" else "⏳"
-            response += f"""{i+1}. {status_emoji} **{apt['date'].strftime('%Y-%m-%d %H:%M')}**
-   Status: {apt['status'].title()}
-   Type: {apt.get('appointment_type', 'Consultation')}
+            
+            # Type emoji
+            type_emoji = "👨‍⚕️" if apt.get('appointment_type', '').lower() in ['doctor', 'consultation', 'medical'] else "🧪" if apt.get('appointment_type', '').lower() in ['lab', 'laboratory', 'test'] else "📋"
+            
+            response += f"""{i+1}. {status_emoji} {type_emoji} **{apt['date'].strftime('%Y-%m-%d %H:%M')}**
+   **Type:** {apt.get('appointment_type', 'Consultation').title()}
+   **Status:** {apt['status'].title()}
 """
-            if apt['notes']:
-                response += f"   Notes: {apt['notes']}\n"
-            if apt.get('doctor_notes'):
-                response += f"   Doctor Notes: {apt['doctor_notes']}\n"
+            
+            # Cal.com booking details
+            if apt.get('cal_com_booking_id'):
+                response += f"   **Booking ID:** {apt['cal_com_booking_id']}\n"
+            if apt.get('cal_com_booking_uid'):
+                response += f"   **Booking UID:** {apt['cal_com_booking_uid']}\n"
+            
+            # Appointment details
+            if apt.get('duration_minutes'):
+                response += f"   **Duration:** {apt['duration_minutes']} minutes\n"
+            if apt.get('timezone'):
+                response += f"   **Timezone:** {apt['timezone']}\n"
+            if apt.get('urgency_level') and apt['urgency_level'] != 'routine':
+                response += f"   **Urgency:** {apt['urgency_level'].title()}\n"
+            
+            # Medical details
+            if apt.get('symptoms'):
+                response += f"   **Symptoms:** {apt['symptoms']}\n"
             if apt.get('diagnosis'):
-                response += f"   Diagnosis: {apt['diagnosis']}\n"
+                response += f"   **Diagnosis:** {apt['diagnosis']}\n"
+            if apt.get('treatment_plan'):
+                response += f"   **Treatment Plan:** {apt['treatment_plan']}\n"
+            
+            # Notes
+            if apt['notes']:
+                response += f"   **Patient Notes:** {apt['notes']}\n"
+            if apt.get('doctor_notes'):
+                response += f"   **Doctor Notes:** {apt['doctor_notes']}\n"
+            
+            # Follow-up information
+            if apt.get('follow_up_required'):
+                response += f"   **Follow-up Required:** Yes\n"
+                if apt.get('follow_up_date'):
+                    response += f"   **Follow-up Date:** {apt['follow_up_date'].strftime('%Y-%m-%d')}\n"
+            
+            # Provider information
+            if apt.get('doctor_name'):
+                response += f"   **Doctor:** {apt['doctor_name']}\n"
+            if apt.get('lab_name'):
+                response += f"   **Lab:** {apt['lab_name']}\n"
+            
             response += "\n"
 
         if len(appointments) > limit:
@@ -442,6 +677,214 @@ This patient has no appointment history in our system."""
 
     except Exception as e:
         return f"❌ **Error fetching appointments**: {str(e)}"
+
+@mcp.tool()
+async def get_appointment_details(appointment_id: str) -> str:
+    """Get detailed information about a specific appointment by its ID.
+    
+    Args:
+        appointment_id: The unique appointment ID to fetch details for
+    """
+    try:
+        # Get appointment from database
+        appointment = AppointmentOperations.get_appointment_by_id(appointment_id)
+        
+        if not appointment:
+            return f"❌ **Appointment Not Found**: No appointment found with ID: {appointment_id}"
+        
+        # Status and type emojis
+        status_emoji = "✅" if appointment.status == "completed" else "📅" if appointment.status == "scheduled" else "❌" if appointment.status == "cancelled" else "⏳"
+        type_emoji = "👨‍⚕️" if appointment.appointment_type.lower() in ['doctor', 'consultation', 'medical'] else "🧪" if appointment.appointment_type.lower() in ['lab', 'laboratory', 'test'] else "📋"
+        
+        # Format appointment details
+        response = f"""{status_emoji} {type_emoji} **Appointment Details**
+
+**📋 Basic Information:**
+• **ID:** {appointment.id}
+• **Date & Time:** {appointment.appointment_time.strftime('%Y-%m-%d %H:%M')}
+• **Type:** {appointment.appointment_type.title()}
+• **Status:** {appointment.status.title()}
+• **Duration:** {appointment.duration_minutes or 30} minutes
+• **Timezone:** {appointment.timezone or 'Asia/Kolkata'}
+
+**👤 Patient Information:**
+• **Name:** {appointment.patient_name}
+• **Email:** {appointment.patient_email}
+
+"""
+        
+        # Cal.com booking details
+        if appointment.cal_com_booking_id or appointment.cal_com_booking_uid:
+            response += "**🔗 Booking Details:**\n"
+            if appointment.cal_com_booking_id:
+                response += f"• **Booking ID:** {appointment.cal_com_booking_id}\n"
+            if appointment.cal_com_booking_uid:
+                response += f"• **Booking UID:** {appointment.cal_com_booking_uid}\n"
+            if appointment.event_type_id:
+                response += f"• **Event Type ID:** {appointment.event_type_id}\n"
+            response += "\n"
+        
+        # Provider information
+        if appointment.doctor_name or appointment.lab_name or appointment.location:
+            response += "**🏥 Provider Information:**\n"
+            if appointment.doctor_name:
+                response += f"• **Doctor:** {appointment.doctor_name}\n"
+            if appointment.lab_name:
+                response += f"• **Lab:** {appointment.lab_name}\n"
+            if appointment.location:
+                response += f"• **Location:** {appointment.location}\n"
+            response += "\n"
+        
+        # Medical details
+        medical_details = []
+        if appointment.symptoms:
+            medical_details.append(f"• **Symptoms:** {appointment.symptoms}")
+        if appointment.diagnosis:
+            medical_details.append(f"• **Diagnosis:** {appointment.diagnosis}")
+        if appointment.treatment_plan:
+            medical_details.append(f"• **Treatment Plan:** {appointment.treatment_plan}")
+        if appointment.urgency_level and appointment.urgency_level != 'routine':
+            medical_details.append(f"• **Urgency Level:** {appointment.urgency_level.title()}")
+        
+        if medical_details:
+            response += "**⚕️ Medical Information:**\n"
+            response += "\n".join(medical_details) + "\n\n"
+        
+        # Notes
+        notes_section = []
+        if appointment.notes:
+            notes_section.append(f"• **Patient Notes:** {appointment.notes}")
+        if appointment.doctor_notes:
+            notes_section.append(f"• **Doctor Notes:** {appointment.doctor_notes}")
+        
+        if notes_section:
+            response += "**📝 Notes:**\n"
+            response += "\n".join(notes_section) + "\n\n"
+        
+        # Follow-up information
+        if appointment.follow_up_required:
+            response += "**🔄 Follow-up Information:**\n"
+            response += f"• **Follow-up Required:** Yes\n"
+            if appointment.follow_up_date:
+                response += f"• **Follow-up Date:** {appointment.follow_up_date.strftime('%Y-%m-%d')}\n"
+            response += "\n"
+        
+        # Timestamps
+        response += "**⏰ System Information:**\n"
+        response += f"• **Created:** {appointment.created_at.strftime('%Y-%m-%d %H:%M:%S')}\n"
+        if appointment.updated_at:
+            response += f"• **Last Updated:** {appointment.updated_at.strftime('%Y-%m-%d %H:%M:%S')}\n"
+        
+        return response
+        
+    except Exception as e:
+        return f"❌ **Error fetching appointment details**: {str(e)}"
+
+@mcp.tool()
+async def get_my_appointments(
+    patient_email: str,
+    status: Optional[str] = None,
+    days_range: int = 30
+) -> str:
+    """Get patient's upcoming and recent appointments with smart filtering.
+
+    Args:
+        patient_email: Patient's email address
+        status: Filter by status ('scheduled', 'completed', 'cancelled') - optional
+        days_range: Number of days to look back/forward (default: 30)
+    """
+    try:
+        from datetime import datetime, timedelta
+        
+        # Get patient data
+        data = PatientDataManager.get_comprehensive_patient_data(patient_email)
+
+        if "error" in data:
+            return f"❌ **Patient Not Found**: {data['error']}"
+
+        patient = data["patient"]
+        all_appointments = data["appointments"]
+
+        # Filter appointments within date range
+        now = datetime.now()
+        start_date = now - timedelta(days=days_range)
+        end_date = now + timedelta(days=days_range)
+        
+        relevant_appointments = []
+        for apt in all_appointments:
+            apt_date = apt['date']
+            if start_date <= apt_date <= end_date:
+                if not status or apt['status'].lower() == status.lower():
+                    relevant_appointments.append(apt)
+
+        if not relevant_appointments:
+            filter_text = f" with status '{status}'" if status else ""
+            return f"""📅 **No Relevant Appointments Found**
+
+**Patient:** {patient['name']} ({patient_email})
+**Date Range:** {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}
+
+No appointments found{filter_text} in the specified timeframe."""
+
+        # Separate upcoming and past appointments
+        upcoming = [apt for apt in relevant_appointments if apt['date'] >= now]
+        past = [apt for apt in relevant_appointments if apt['date'] < now]
+        
+        # Sort: upcoming by earliest first, past by most recent first
+        upcoming.sort(key=lambda x: x['date'])
+        past.sort(key=lambda x: x['date'], reverse=True)
+
+        response = f"""📅 **My Appointments - {patient['name']}**
+**Email:** {patient_email}
+**Date Range:** {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}
+{f"**Status Filter:** {status.title()}" if status else ""}
+
+"""
+
+        # Show upcoming appointments first
+        if upcoming:
+            response += f"🔜 **Upcoming Appointments ({len(upcoming)}):**\n\n"
+            for i, apt in enumerate(upcoming):
+                days_until = (apt['date'] - now).days
+                time_str = f"in {days_until} days" if days_until > 0 else "today" if days_until == 0 else f"{abs(days_until)} days ago"
+                
+                type_emoji = "👨‍⚕️" if apt.get('appointment_type', '').lower() in ['doctor', 'consultation', 'medical'] else "🧪"
+                status_emoji = "📅" if apt['status'] == "scheduled" else "⏳"
+                
+                response += f"""{i+1}. {status_emoji} {type_emoji} **{apt['date'].strftime('%Y-%m-%d %H:%M')}** ({time_str})
+   **Type:** {apt.get('appointment_type', 'Consultation').title()}
+   **Status:** {apt['status'].title()}
+"""
+                if apt.get('urgency_level') and apt['urgency_level'] != 'routine':
+                    response += f"   **Urgency:** {apt['urgency_level'].title()}\n"
+                if apt['notes']:
+                    response += f"   **Notes:** {apt['notes']}\n"
+                response += "\n"
+
+        # Show recent past appointments
+        if past:
+            response += f"📋 **Recent Past Appointments ({len(past)}):**\n\n"
+            for i, apt in enumerate(past[:5]):  # Limit to 5 most recent
+                days_ago = (now - apt['date']).days
+                time_str = f"{days_ago} days ago" if days_ago > 0 else "today"
+                
+                type_emoji = "👨‍⚕️" if apt.get('appointment_type', '').lower() in ['doctor', 'consultation', 'medical'] else "🧪"
+                status_emoji = "✅" if apt['status'] == "completed" else "❌" if apt['status'] == "cancelled" else "⏳"
+                
+                response += f"""{i+1}. {status_emoji} {type_emoji} **{apt['date'].strftime('%Y-%m-%d %H:%M')}** ({time_str})
+   **Type:** {apt.get('appointment_type', 'Consultation').title()}
+   **Status:** {apt['status'].title()}
+"""
+                if apt.get('diagnosis'):
+                    response += f"   **Diagnosis:** {apt['diagnosis']}\n"
+                if apt.get('doctor_notes'):
+                    response += f"   **Doctor Notes:** {apt['doctor_notes']}\n"
+                response += "\n"
+
+        return response
+
+    except Exception as e:
+        return f"❌ **Error fetching your appointments**: {str(e)}"
 
 @mcp.tool()
 async def get_appointments(limit: int = 10) -> str:
@@ -995,16 +1438,14 @@ async def intelligent_medical_assistant(
     query: str,
     patient_email: Optional[str] = None
 ) -> str:
-    """Enhanced medical assistant for patient care, appointment scheduling, and health advice.
+    """Enhanced medical assistant powered by MeTTa knowledge graph for patient care, appointment scheduling, and health advice.
 
     Args:
         query: Natural language query about appointments, symptoms, or medical questions
         patient_email: Optional patient email for personalized responses and history tracking
     """
-    query_lower = query.lower()
-
-    # Get patient history if email provided
-    patient_context = ""
+    # Get patient context if email provided
+    patient_context = {}
     if patient_email:
         try:
             data = PatientDataManager.get_comprehensive_patient_data(patient_email)
@@ -1012,196 +1453,49 @@ async def intelligent_medical_assistant(
                 patient = data["patient"]
                 appointments = data["appointments"]
                 prescriptions = data["prescriptions"]
-
-                patient_context = f"""
-**Patient Context:**
-- Name: {patient['name']}
-- Previous appointments: {len(appointments)}
-- Active prescriptions: {len([rx for rx in prescriptions if rx['is_active']])}
-"""
+                
+                # Extract patient age group (simplified - you'd calculate from DOB in practice)
+                age_group = "adult"  # Default, would calculate from patient.date_of_birth
+                
+                patient_context = {
+                    "patient_id": str(patient["id"]),
+                    "name": patient["name"],
+                    "email": patient_email,
+                    "age_group": age_group,
+                    "appointment_count": len(appointments),
+                    "active_prescriptions": len([rx for rx in prescriptions if rx["is_active"]]),
+                    "medications": [rx["medication"] for rx in prescriptions if rx["is_active"]]
+                }
         except:
             pass
 
-    # Medical advice for common symptoms/conditions
-    if any(word in query_lower for word in ["fever", "temperature", "hot"]):
-        return f"""🌡️ **Fever Management Advice**
-
-**Immediate Care:**
-• Monitor temperature regularly
-• Stay hydrated (water, clear broths, electrolyte drinks)
-• Rest and avoid strenuous activities
-• Use cooling measures (lukewarm bath, light clothing)
-
-**When to Seek Immediate Care:**
-• Temperature above 103°F (39.4°C)
-• Difficulty breathing or chest pain
-• Severe dehydration
-• Persistent high fever for more than 3 days
-
-**Precautions Before Your Appointment:**
-• Take temperature readings every 4-6 hours
-• Keep a symptom diary
-• Avoid contact with others if possible
-• Have someone available to drive you if needed
-
-{patient_context}
-
-Would you like me to help schedule an appointment for medical evaluation?"""
-
-    elif any(word in query_lower for word in ["headache", "head pain", "migraine"]):
-        return f"""🧠 **Headache Management**
-
-**Immediate Relief:**
-• Apply cold or warm compress to head/neck
-• Rest in a quiet, dark room
-• Stay hydrated
-• Gentle neck and shoulder stretches
-• Consider over-the-counter pain relievers (as directed)
-
-**Warning Signs - Seek Immediate Care:**
-• Sudden, severe headache unlike any before
-• Headache with fever, stiff neck, confusion
-• Headache after head injury
-• Progressive worsening over days
-
-**Track for Your Appointment:**
-• Headache frequency and intensity (1-10 scale)
-• Potential triggers (stress, foods, sleep patterns)
-• Associated symptoms (nausea, vision changes)
-
-{patient_context}
-
-Would you like me to schedule an appointment to discuss your headache patterns?"""
-
-    elif any(word in query_lower for word in ["cough", "cold", "runny nose", "congestion"]):
-        return f"""🤧 **Cold/Cough Care**
-
-**Home Management:**
-• Increase fluid intake (warm liquids especially helpful)
-• Use humidifier or breathe steam from hot shower
-• Get adequate rest (7-9 hours sleep)
-• Honey for cough relief (not for children under 1 year)
-• Saltwater gargle for sore throat
-
-**Precautions:**
-• Wear mask around others
-• Wash hands frequently
-• Avoid touching face
-• Stay home to prevent spread
-
-**Schedule Appointment If:**
-• Symptoms worsen after 7-10 days
-• High fever or difficulty breathing
-• Severe sinus pain or green discharge
-• Persistent cough lasting more than 2 weeks
-
-{patient_context}
-
-Shall I check available appointments for a consultation?"""
-
-    elif any(word in query_lower for word in ["stomach", "nausea", "vomiting", "diarrhea"]):
-        return f"""🤢 **Digestive Issues Care**
-
-**Immediate Management:**
-• Stay hydrated with small, frequent sips
-• BRAT diet: Bananas, Rice, Applesauce, Toast
-• Avoid dairy, fatty, or spicy foods
-• Rest and avoid solid foods if vomiting
-
-**Red Flags - Seek Immediate Care:**
-• Signs of severe dehydration
-• Blood in vomit or stool
-• High fever with abdominal pain
-• Severe abdominal cramping
-
-**Preparation for Appointment:**
-• Track frequency of symptoms
-• Note any recent food/medication changes
-• Monitor hydration status
-• Keep symptom diary
-
-{patient_context}
-
-Would you like me to schedule an urgent care appointment?"""
-
-    # Appointment-related queries
-    elif any(word in query_lower for word in ["book", "appointment", "schedule", "when can i", "available"]):
-        response = f"""📅 **Appointment Assistance**
-
-I can help you schedule an appointment right away! Here's what I can do:
-
-**Quick Booking Options:**
-1. **Smart Booking**: Tell me your preferred date/time and I'll find the best slot
-2. **Next Available**: Book the first available appointment
-3. **Specific Time**: Choose from available time slots
-
-**What I Need:**
-• Your preferred date and time
-• Reason for visit (helps with preparation advice)
-• Your contact information
-
-{patient_context}
-
-**Example:** "Book me for Tuesday at 10 AM for a routine checkup"
-
-Would you like me to check available appointments for you?"""
-
-        if patient_email:
-            response += f"\n\n**Ready to book for:** {patient_email}"
-
-        return response
-
-    # Medication queries
-    elif any(word in query_lower for word in ["medication", "medicine", "prescription", "dosage"]):
-        return f"""💊 **Medication Information**
-
-**General Medication Safety:**
-• Always follow prescribed dosages
-• Take medications at consistent times
-• Don't share prescription medications
-• Store medications properly
-• Check expiration dates regularly
-
-**Before Your Appointment:**
-• Prepare list of current medications (names, dosages, frequency)
-• Note any side effects or concerns
-• Bring medication bottles or take photos
-• List any allergies or adverse reactions
-
-{patient_context}
-
-**Important:** For specific medication questions, please consult with your healthcare provider or pharmacist.
-
-Would you like to schedule an appointment to review your medications?"""
-
-    # General health queries
-    else:
-        return f"""🏥 **Patient Care Assistant**
-
-I'm here to help you with:
-
-**🩺 Medical Guidance:**
-• Symptom assessment and home care advice
-• Pre-appointment preparation tips
-• Medication reminders and safety
-
-**📅 Appointment Management:**
-• Schedule appointments instantly
-• Check your appointment history
-• Reschedule or cancel appointments
-
-**📋 Health Tracking:**
-• Monitor your symptoms before visits
-• Track medication adherence
-• Maintain health records
-
-{patient_context}
-
-**For your query:** "{query}"
-
-Please describe your symptoms or health concerns in more detail, or let me know if you'd like to schedule an appointment.
-
-**Emergency:** For urgent medical concerns, please call emergency services or visit the nearest emergency room."""
+    # Use MeTTa knowledge graph to process the query
+    try:
+        response_data = process_medical_query(query, patient_rag, llm, patient_context)
+        formatted_response = format_comprehensive_medical_response(response_data)
+        
+        # Add patient-specific context if available
+        if patient_context:
+            patient_info = f"""
+**👤 Patient Information:**
+- Name: {patient_context['name']}
+- Email: {patient_email}
+- Previous appointments: {patient_context['appointment_count']}
+- Active prescriptions: {patient_context['active_prescriptions']}
+"""
+            formatted_response = formatted_response.replace("**⚠️ Medical Disclaimer:**", f"{patient_info}\n**⚠️ Medical Disclaimer:**")
+        
+        # Add appointment booking suggestion for urgent cases
+        urgency = response_data.get("urgency_level", "unknown")
+        if urgency in ["urgent", "emergency"] and patient_email:
+            booking_suggestion = f"\n\n**📅 Immediate Action Required:**\nWould you like me to help schedule an urgent appointment for {patient_email}? I can find the next available slot immediately."
+            formatted_response += booking_suggestion
+        
+        return formatted_response
+        
+    except Exception as e:
+        # Fallback to basic response if knowledge graph fails
+        return await _fallback_knowledge_response(query, patient_email)
 
 @mcp.tool()
 async def get_symptom_based_precautions(
@@ -1346,13 +1640,21 @@ async def get_medical_knowledge(
     query: str,
     knowledge_type: str = "general"
 ) -> str:
-    """Simple medical information lookup (knowledge graph functionality removed).
+    """Enhanced medical information lookup using MeTTa knowledge graph.
 
     Args:
         query: The medical query or topic
         knowledge_type: Type of knowledge to search ('specialty', 'symptom', 'faq', 'appointment')
     """
-    return f"""🏥 **Medical Information**
+    try:
+        # Use the knowledge graph to process the query
+        response_data = process_medical_query(query, patient_rag, llm)
+        
+        # Format and return the response
+        return format_comprehensive_medical_response(response_data)
+        
+    except Exception as e:
+        return f"""🏥 **Medical Information**
 
 For specific medical information about {query}, please:
 • Contact our office directly
@@ -1360,20 +1662,102 @@ For specific medical information about {query}, please:
 • Visit our website for general health information
 
 **Office Contact**: Call during business hours for medical questions
-**Emergency**: For urgent medical concerns, seek immediate medical attention"""
+**Emergency**: For urgent medical concerns, seek immediate medical attention
+
+**Error**: Knowledge graph temporarily unavailable: {str(e)}"""
 
 @mcp.tool()
 async def get_patient_insights(
     patient_email: str,
     appointment_type: str = "consultation"
 ) -> str:
-    """Get basic patient information (knowledge graph functionality removed).
+    """Get comprehensive patient insights using MeTTa knowledge graph and patient data.
 
     Args:
         patient_email: Patient's email address
         appointment_type: Type of appointment for context
     """
-    return f"""👤 **Patient Profile: {patient_email}**
+    try:
+        # Get patient data from database
+        data = PatientDataManager.get_comprehensive_patient_data(patient_email)
+        
+        if "error" in data:
+            return f"❌ **Patient Not Found**: {data['error']}"
+        
+        patient = data["patient"]
+        appointments = data["appointments"]
+        prescriptions = data["prescriptions"]
+        
+        # Build patient context for knowledge graph
+        patient_data = {
+            "patient_id": str(patient["id"]),
+            "name": patient["name"],
+            "email": patient_email,
+            "age_group": "adult",  # Would calculate from DOB in practice
+            "medications": [rx["medication"] for rx in prescriptions if rx["is_active"]],
+            "appointment_history": len(appointments),
+            "current_symptoms": [],  # Would extract from recent appointment notes
+            "risk_factors": []  # Would extract from patient history
+        }
+        
+        # Get knowledge graph insights
+        insights = get_patient_specific_insights(patient_data, patient_rag)
+        
+        # Format comprehensive response
+        response = f"""👤 **Comprehensive Patient Profile: {patient['name']}**
+
+**📋 Basic Information:**
+- Email: {patient_email}
+- Phone: {patient.get('phone', 'Not provided')}
+- Appointment History: {len(appointments)} appointments
+- Active Prescriptions: {len([rx for rx in prescriptions if rx['is_active']])}
+
+**🧠 Knowledge Graph Insights:**
+"""
+        
+        # Add medication safety analysis if medications exist
+        if patient_data["medications"]:
+            med_safety = insights.get("medication_review", {})
+            if med_safety:
+                response += f"""
+**💊 Medication Safety Analysis:**
+• Current Medications: {', '.join(patient_data['medications'])}
+• Safety Status: Analyzing interactions and contraindications
+"""
+        
+        # Add preventive care recommendations
+        preventive_care = insights.get("preventive_care", {})
+        if preventive_care.get("recommendations"):
+            response += f"""
+**🏥 Preventive Care Recommendations:**
+• Age Group: {patient_data['age_group']}
+• Recommendations: {', '.join(preventive_care['recommendations'][:3])}
+"""
+        
+        # Add appointment type specific recommendations
+        duration = patient_rag.get_appointment_duration_recommendation(appointment_type)
+        response += f"""
+**📅 Appointment Optimization:**
+- Type: {appointment_type}
+- Recommended Duration: {duration}
+- Last Appointment: {appointments[-1]['date'].strftime('%Y-%m-%d') if appointments else 'No previous appointments'}
+"""
+        
+        response += f"""
+**🎯 Patient-Specific Recommendations:**
+- Review medication interactions before appointment
+- Prepare comprehensive symptom history
+- Consider preventive care screening based on age group
+- Maintain detailed health tracking between visits
+
+**Appointment Type**: {appointment_type}"""
+        
+        return response
+        
+    except Exception as e:
+        return f"""👤 **Patient Profile: {patient_email}**
+
+**Error accessing comprehensive insights**: {str(e)}
 
 **Basic Information Available**
 For detailed patient insights and history, please:
@@ -1389,20 +1773,236 @@ async def add_patient_preference(
     preference_type: str,
     preference_value: str
 ) -> str:
-    """Add patient preferences (knowledge graph functionality removed).
+    """Add patient preferences to the knowledge graph.
 
     Args:
         patient_email: Patient's email address
         preference_type: Type of preference (e.g., 'time', 'doctor', 'appointment_type')
         preference_value: The preference value
     """
-    return f"""📝 **Patient Preference Noted**
+    try:
+        # Add preference to knowledge graph
+        result = patient_rag.add_patient_knowledge(
+            "patient_preference",
+            f"{patient_email}_{preference_type}",
+            preference_value
+        )
+        
+        return f"""📝 **Patient Preference Added to Knowledge Graph**
 
 **Patient**: {patient_email}
 **Preference Type**: {preference_type}
 **Value**: {preference_value}
 
+**Knowledge Graph Update**: {result}
+
+This preference will be used for future personalized recommendations and appointment scheduling."""
+        
+    except Exception as e:
+        return f"""📝 **Patient Preference Processing**
+
+**Patient**: {patient_email}
+**Preference Type**: {preference_type}
+**Value**: {preference_value}
+
+**Error**: Could not add to knowledge graph: {str(e)}
+
 Note: Please update patient preferences directly in the patient management system."""
+
+@mcp.tool()
+async def analyze_patient_symptoms(
+    patient_email: str,
+    symptoms: List[str],
+    severity_scale: Optional[int] = None
+) -> str:
+    """Comprehensive symptom analysis using MeTTa knowledge graph.
+
+    Args:
+        patient_email: Patient's email address
+        symptoms: List of symptoms to analyze
+        severity_scale: Optional severity rating (1-10)
+    """
+    try:
+        # Get patient context
+        patient_context = {"patient_id": patient_email}
+        try:
+            data = PatientDataManager.get_comprehensive_patient_data(patient_email)
+            if "error" not in data:
+                patient = data["patient"]
+                prescriptions = data["prescriptions"]
+                patient_context.update({
+                    "name": patient["name"],
+                    "medications": [rx["medication"] for rx in prescriptions if rx["is_active"]],
+                    "age_group": "adult"  # Would calculate from DOB
+                })
+        except:
+            pass
+        
+        # Analyze symptoms using knowledge graph
+        conditions = patient_rag.query_symptoms_conditions(symptoms)
+        urgency_assessment = patient_rag.assess_urgency_level(symptoms, patient_context)
+        specialist_recs = patient_rag.get_specialist_recommendation([item['condition'] for item in conditions])
+        
+        # Check medication interactions if patient has current medications
+        medication_warnings = []
+        if patient_context.get("medications"):
+            safety_report = patient_rag.check_medication_safety(
+                patient_context["medications"], 
+                patient_context.get("age_group", "adult")
+            )
+            if safety_report.get("interactions"):
+                medication_warnings = safety_report["interactions"]
+        
+        # Format comprehensive analysis
+        response = f"""🩺 **Comprehensive Symptom Analysis**
+
+**Patient**: {patient_context.get('name', patient_email)}
+**Symptoms Analyzed**: {', '.join(symptoms)}
+{f"**Severity**: {severity_scale}/10" if severity_scale else ""}
+
+**🔍 Condition Analysis:**
+"""
+        
+        for condition in conditions:
+            response += f"""• **{condition['condition'].replace('_', ' ').title()}**
+  - Associated with: {condition['symptom'].replace('_', ' ')}
+  - Urgency: {condition.get('urgency', 'unknown')}
+  - Treatment approach: {condition.get('treatment', 'assessment needed')}
+"""
+        
+        response += f"""
+**⚡ Urgency Assessment:**
+- **Level**: {urgency_assessment['urgency_level'].upper()}
+- **Primary Concern**: {urgency_assessment.get('primary_concern', 'Multiple symptoms')}
+- **Recommendation**: {urgency_assessment['recommendation']}
+"""
+        
+        if specialist_recs:
+            response += f"""
+**👨‍⚕️ Specialist Recommendations:**
+"""
+            for specialty, conditions_list in specialist_recs.items():
+                response += f"• **{specialty.replace('_', ' ').title()}**: {', '.join(conditions_list)}\n"
+        
+        if medication_warnings:
+            response += f"""
+**⚠️ Medication Interaction Warnings:**
+"""
+            for warning in medication_warnings:
+                response += f"• {warning['drug1']} + {warning['drug2']}: {warning['risk']}\n"
+        
+        response += f"""
+**📋 Next Steps:**
+1. {urgency_assessment['recommendation']}
+2. Monitor symptoms and track changes
+3. Prepare symptom timeline for healthcare provider
+{f"4. Consider specialist consultation: {', '.join(specialist_recs.keys())}" if specialist_recs else ""}
+
+**📞 Emergency Action**: For severe symptoms, call emergency services immediately.
+"""
+        
+        return response
+        
+    except Exception as e:
+        return f"""🩺 **Symptom Analysis**
+
+**Patient**: {patient_email}
+**Symptoms**: {', '.join(symptoms)}
+
+**Error**: Could not complete knowledge graph analysis: {str(e)}
+
+**General Recommendation**: Please consult with a healthcare professional for proper symptom evaluation and diagnosis."""
+
+@mcp.tool()
+async def get_medication_interaction_check(
+    medications: List[str],
+    patient_email: Optional[str] = None
+) -> str:
+    """Check for medication interactions using the knowledge graph.
+
+    Args:
+        medications: List of medication names to check
+        patient_email: Optional patient email for personalized context
+    """
+    try:
+        # Get patient age group if email provided
+        age_group = "adult"  # default
+        if patient_email:
+            try:
+                data = PatientDataManager.get_comprehensive_patient_data(patient_email)
+                if "error" not in data:
+                    # Would calculate from DOB in practice
+                    age_group = "adult"
+            except:
+                pass
+        
+        # Check medication safety using knowledge graph
+        safety_report = patient_rag.check_medication_safety(medications, age_group)
+        
+        response = f"""💊 **Medication Interaction Analysis**
+
+{"**Patient**: " + patient_email if patient_email else ""}
+**Medications Analyzed**: {', '.join(medications)}
+**Age Group**: {age_group}
+
+"""
+        
+        # Safe medications
+        if safety_report["safe_medications"]:
+            response += f"""**✅ Age-Appropriate Medications:**
+{chr(10).join([f"• {med}" for med in safety_report["safe_medications"]])}
+
+"""
+        
+        # Age concerns
+        if safety_report["age_concerns"]:
+            response += f"""**⚠️ Age-Related Concerns:**
+{chr(10).join([f"• {med} - requires age-specific dosing consideration" for med in safety_report["age_concerns"]])}
+
+"""
+        
+        # Drug interactions
+        if safety_report["interactions"]:
+            response += f"""**🚨 Drug Interaction Warnings:**
+"""
+            for interaction in safety_report["interactions"]:
+                response += f"• **{interaction['drug1']} + {interaction['drug2']}**\n"
+                response += f"  Risk: {interaction['risk']}\n"
+                response += f"  Action: Consult healthcare provider before combining\n\n"
+        else:
+            response += "**✅ No Known Interactions Found**\n\n"
+        
+        # Get detailed medication info
+        response += "**📋 Detailed Medication Information:**\n"
+        for med in medications:
+            med_info = patient_rag.get_medication_info(med)
+            if med_info["dosage"] or med_info["contraindications"]:
+                response += f"\n**{med.title()}:**\n"
+                if med_info["dosage"]:
+                    response += f"• Dosage: {med_info['dosage'][0]}\n"
+                if med_info["contraindications"]:
+                    response += f"• Contraindications: {', '.join(med_info['contraindications'])}\n"
+        
+        response += f"""
+**⚠️ Important Notes:**
+• This analysis is based on general drug interaction data
+• Always consult your healthcare provider or pharmacist
+• Inform all healthcare providers of all medications you're taking
+• Never stop or change medications without professional guidance
+
+**📞 For urgent concerns**: Contact your healthcare provider or pharmacist immediately."""
+        
+        return response
+        
+    except Exception as e:
+        return f"""💊 **Medication Interaction Check**
+
+**Medications**: {', '.join(medications)}
+{"**Patient**: " + patient_email if patient_email else ""}
+
+**Error**: Could not complete interaction analysis: {str(e)}
+
+**Recommendation**: Please consult your healthcare provider or pharmacist for medication interaction screening."""
 
 @mcp.tool()
 async def quick_book_appointment_slot(

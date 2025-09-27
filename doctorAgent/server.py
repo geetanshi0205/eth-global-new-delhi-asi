@@ -1428,6 +1428,80 @@ async def quick_book_alternative(
 Just let me know and I'll handle it right away!"""
 
 @mcp.tool()
+async def doctor_add_prescription(
+    patient_email: str,
+    medication_name: str,
+    dosage: str,
+    frequency: str,
+    duration: Optional[str] = None,
+    instructions: Optional[str] = None,
+    prescribed_by: str = "Doctor",
+    refills_remaining: int = 0,
+    start_date: Optional[str] = None
+) -> str:
+    """Add a new prescription for a patient as a doctor.
+    
+    This tool allows doctors to quickly add prescriptions to the prescriptions table
+    by providing the patient's email and prescription details.
+    
+    Args:
+        patient_email: Patient's email address
+        medication_name: Name of the medication
+        dosage: Dosage information (e.g., "500mg", "1 tablet")
+        frequency: How often to take (e.g., "twice daily", "every 8 hours", "as needed")
+        duration: How long to take (e.g., "7 days", "2 weeks", "until finished")
+        instructions: Special instructions (e.g., "take with food", "before bedtime")
+        prescribed_by: Doctor who prescribed it (default: "Doctor")
+        refills_remaining: Number of refills allowed (default: 0)
+        start_date: Start date in YYYY-MM-DD format (defaults to today)
+    """
+    try:
+        # Parse start date
+        start_dt = None
+        if start_date:
+            try:
+                start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+            except ValueError:
+                return "❌ **Invalid date format**: Please use YYYY-MM-DD format for start_date"
+        else:
+            start_dt = datetime.now()
+        
+        # Create prescription using existing operations
+        prescription = PrescriptionOperations.create_prescription(
+            patient_email=patient_email,
+            medication_name=medication_name,
+            dosage=dosage,
+            frequency=frequency,
+            duration=duration,
+            instructions=instructions,
+            prescribed_by=prescribed_by,
+            refills_remaining=refills_remaining,
+            start_date=start_dt
+        )
+        
+        return f"""💊 **Prescription Added Successfully by Doctor**
+
+**Prescription Details:**
+- Medication: {prescription.medication_name}
+- Dosage: {prescription.dosage}
+- Frequency: {prescription.frequency}
+- Duration: {prescription.duration or 'As needed'}
+- Start Date: {prescription.start_date.strftime('%Y-%m-%d')}
+- Refills: {prescription.refills_remaining}
+- Prescribed by: {prescription.prescribed_by}
+{f"- Instructions: {prescription.instructions}" if prescription.instructions else ""}
+
+**Patient:** {patient_email}
+**Prescription ID:** {prescription.id}
+
+✅ **Prescription has been saved to the database and is now active for the patient.**"""
+        
+    except ValueError as e:
+        return f"❌ **Patient Error**: {str(e)}"
+    except Exception as e:
+        return f"❌ **Error adding prescription**: {str(e)}"
+
+@mcp.tool()
 async def get_event_types(limit: int = 10) -> str:
     """Get available event types (appointment types) for booking.
     

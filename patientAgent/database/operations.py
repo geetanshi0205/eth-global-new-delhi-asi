@@ -108,9 +108,10 @@ class AppointmentOperations:
         patient_email: str,
         appointment_date: datetime,
         cal_booking_id: str = None,
+        appointment_type: str = "consultation",
         **kwargs
     ) -> Appointment:
-        """Create new appointment"""
+        """Create new appointment with enhanced fields"""
         db = get_db()
         try:
             patient = PatientOperations.get_patient_by_email(patient_email)
@@ -119,11 +120,18 @@ class AppointmentOperations:
             
             appointment = Appointment(
                 patient_id=patient.id,
+                patient_email=patient_email,
+                patient_name=patient.name,
+                appointment_type=appointment_type,
                 appointment_time=appointment_date,
-                cal_com_event_id=cal_booking_id,
+                cal_com_booking_id=cal_booking_id,
                 status=kwargs.get('status', 'scheduled'),
                 notes=kwargs.get('notes'),
-                doctor_id=kwargs.get('doctor_id', 'default_doctor')
+                doctor_id=kwargs.get('doctor_id', 'default_doctor'),
+                urgency_level=kwargs.get('urgency_level', 'routine'),
+                timezone=kwargs.get('timezone', 'Asia/Kolkata'),
+                language=kwargs.get('language', 'en'),
+                duration_minutes=kwargs.get('duration_minutes', 30)
             )
             db.add(appointment)
             db.commit()
@@ -154,7 +162,64 @@ class AppointmentOperations:
         """Get appointment by Cal.com booking ID"""
         db = get_db()
         try:
-            return db.query(Appointment).filter(Appointment.cal_com_event_id == cal_booking_id).first()
+            return db.query(Appointment).filter(Appointment.cal_com_booking_id == cal_booking_id).first()
+        finally:
+            db.close()
+    
+    @staticmethod
+    def get_appointment_by_id(appointment_id: str) -> Optional[Appointment]:
+        """Get appointment by appointment ID"""
+        db = get_db()
+        try:
+            return db.query(Appointment).filter(Appointment.id == appointment_id).first()
+        finally:
+            db.close()
+    
+    @staticmethod
+    def get_appointments_by_type(appointment_type: str, limit: int = 50) -> List[Appointment]:
+        """Get appointments by type (doctor, lab, etc.)"""
+        db = get_db()
+        try:
+            return db.query(Appointment).filter(
+                Appointment.appointment_type == appointment_type
+            ).order_by(desc(Appointment.appointment_time)).limit(limit).all()
+        finally:
+            db.close()
+    
+    @staticmethod
+    def get_appointments_by_status(status: str, limit: int = 50) -> List[Appointment]:
+        """Get appointments by status"""
+        db = get_db()
+        try:
+            return db.query(Appointment).filter(
+                Appointment.status == status
+            ).order_by(desc(Appointment.appointment_time)).limit(limit).all()
+        finally:
+            db.close()
+    
+    @staticmethod
+    def complete_appointment(appointment_id: str, doctor_notes: str = None, 
+                           diagnosis: str = None, treatment_plan: str = None,
+                           follow_up_required: bool = False, follow_up_date: datetime = None) -> Optional[Appointment]:
+        """Mark appointment as completed with medical details"""
+        db = get_db()
+        try:
+            appointment = db.query(Appointment).filter(Appointment.id == appointment_id).first()
+            if appointment:
+                appointment.status = "completed"
+                if doctor_notes:
+                    appointment.doctor_notes = doctor_notes
+                if diagnosis:
+                    appointment.diagnosis = diagnosis
+                if treatment_plan:
+                    appointment.treatment_plan = treatment_plan
+                appointment.follow_up_required = follow_up_required
+                if follow_up_date:
+                    appointment.follow_up_date = follow_up_date
+                appointment.updated_at = datetime.now()
+                db.commit()
+                db.refresh(appointment)
+            return appointment
         finally:
             db.close()
 
@@ -240,10 +305,26 @@ class PatientDataManager:
                 {
                     "id": apt.id,
                     "date": apt.appointment_time,
+                    "appointment_type": getattr(apt, 'appointment_type', 'consultation'),
                     "status": apt.status,
                     "notes": apt.notes,
                     "doctor_id": apt.doctor_id,
-                    "cal_booking_id": apt.cal_com_event_id
+                    "doctor_name": getattr(apt, 'doctor_name', None),
+                    "lab_name": getattr(apt, 'lab_name', None),
+                    "cal_com_booking_id": getattr(apt, 'cal_com_booking_id', getattr(apt, 'cal_com_event_id', None)),
+                    "cal_com_booking_uid": getattr(apt, 'cal_com_booking_uid', None),
+                    "event_type_id": getattr(apt, 'event_type_id', None),
+                    "duration_minutes": getattr(apt, 'duration_minutes', None),
+                    "timezone": getattr(apt, 'timezone', None),
+                    "language": getattr(apt, 'language', None),
+                    "urgency_level": getattr(apt, 'urgency_level', 'routine'),
+                    "symptoms": getattr(apt, 'symptoms', None),
+                    "diagnosis": getattr(apt, 'diagnosis', None),
+                    "doctor_notes": getattr(apt, 'doctor_notes', None),
+                    "treatment_plan": getattr(apt, 'treatment_plan', None),
+                    "follow_up_required": getattr(apt, 'follow_up_required', False),
+                    "follow_up_date": getattr(apt, 'follow_up_date', None),
+                    "location": getattr(apt, 'location', None)
                 } for apt in appointments
             ],
             "prescriptions": [
