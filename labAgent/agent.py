@@ -3,7 +3,7 @@ from server import mcp
 from uagents import Agent
 from dotenv import load_dotenv
 import os
-cd
+
 load_dotenv()
 
 # Create an MCP adapter with your MCP server
@@ -13,7 +13,7 @@ mcp_adapter = MCPServerAdapter(
     model="asi1-mini"
 )
 
-agent = Agent(name="Lab Agent", port=8003, seed="Lab Agent ETHGlobal New Delhi", mailbox=True, publish_agent_details=True)
+agent = Agent(name="Lab Agent", port=8000, seed="Lab Agent ETHGlobal New Delhi55", mailbox=True, publish_agent_details=True)
 
 for protocol in mcp_adapter.protocols:
     agent.include(protocol, publish_manifest=True)
