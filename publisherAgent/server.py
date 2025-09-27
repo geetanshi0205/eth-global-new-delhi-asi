@@ -186,24 +186,18 @@ Your job is to:
             raise Exception(f"Failed to anonymize text with ASI LLM: {str(e)}")
 
 @mcp.tool()
-async def publish_report(
+async def verify_and_request_price(
     report_id: str,
     patient_email: str,
-    mpin: str,
-    title: Optional[str] = None,
-    description: Optional[str] = None,
-    tags: Optional[str] = None
+    mpin: str
 ) -> str:
-    """Publish a medical report by anonymizing it and adding to marketplace.
-    Requires patient authentication with email and MPIN.
+    """Verify patient authentication and request pricing for marketplace publication.
+    This is step 1 of the publication process.
     
     Args:
         report_id: Unique ID of the report in the patient_reports database
         patient_email: Patient's email address for verification
         mpin: Patient's Medical PIN for authentication
-        title: Title for the published report (optional, will generate if not provided)
-        description: Description for the published report (optional)
-        tags: Comma-separated tags for categorization (optional)
     """
     try:
         # First verify patient authorization
@@ -219,35 +213,154 @@ async def publish_report(
         # Get the original report (we know it exists from verification)
         original_report = PatientReportOperations.get_report_by_id(report_id)
         
+        return f"✅ Authentication successful! Ready to publish your {original_report.report_type} report.\n\n" \
+               f"📋 Report Details:\n" \
+               f"   🆔 ID: {report_id}\n" \
+               f"   🏷️ Type: {original_report.report_type.title()}\n" \
+               f"   📅 Test Date: {original_report.test_date.strftime('%Y-%m-%d')}\n" \
+               f"   📧 Patient: {patient_email}\n\n" \
+               f"📝 **ALL FIELDS REQUIRED**: Please provide the following information to complete publication:\n\n" \
+               f"1. 📝 **Title**: A descriptive title for your report\n" \
+               f"   Example: 'Comprehensive Blood Analysis Report' or 'Complete Blood Count Results'\n\n" \
+               f"2. 📄 **Description**: Detailed description of the report content\n" \
+               f"   Example: 'Complete blood work including CBC, lipid panel, and liver function tests'\n\n" \
+               f"3. 💰 **Price**: Price in ETH for your report\n" \
+               f"   💡 Recommended: 0.000001 ETH (for testing) or set your own (e.g., 0.001, 0.01)\n\n" \
+               f"4. 🏦 **Wallet Address**: Your ETH wallet address for receiving payments\n" \
+               f"   Example: 0x742d35Cc6Bb1D6B7E6Cb0B5C7E8B8B9E8E0D8B9E\n\n" \
+               f"🔄 Next step: Use 'publish_report_with_price' with ALL required fields: title, description, price_eth, and wallet_address."
+               
+    except Exception as e:
+        return f"❌ Failed to verify access: {str(e)}"
+
+@mcp.tool()
+async def publish_report_with_price(
+    report_id: str,
+    patient_email: str,
+    mpin: str,
+    price_eth: str,
+    wallet_address: str,
+    title: str,
+    description: str,
+    tags: Optional[str] = None
+) -> str:
+    """Complete the publication process with all required user-provided information.
+    This is step 2 of the publication process - call after verify_and_request_price.
+    
+    Args:
+        report_id: Unique ID of the report in the patient_reports database
+        patient_email: Patient's email address for verification
+        mpin: Patient's Medical PIN for authentication
+        price_eth: Price in ETH for the report (REQUIRED - user must specify)
+        wallet_address: ETH wallet address for receiving payments (REQUIRED)
+        title: Title for the published report (REQUIRED - user must provide)
+        description: Description for the published report (REQUIRED - user must provide)
+        tags: Comma-separated tags for categorization (optional)
+    """
+    try:
+        # First verify patient authorization again for security
+        is_authorized = PatientReportOperations.verify_patient_access(
+            report_id=report_id,
+            patient_email=patient_email,
+            mpin=mpin
+        )
+        
+        if not is_authorized:
+            return f"❌ Authentication failed. Invalid report ID, email, or MPIN. Please verify your credentials."
+        
+        # Validate price format
+        try:
+            float(price_eth)
+            if float(price_eth) < 0:
+                return f"❌ Invalid price. Price must be a positive number."
+        except ValueError:
+            return f"❌ Invalid price format. Please provide a valid number for price_eth (e.g., '0.000001')"
+        
+        # Validate wallet address format (basic ETH address validation)
+        if not wallet_address or not wallet_address.startswith('0x') or len(wallet_address) != 42:
+            return f"❌ Invalid wallet address. Please provide a valid ETH wallet address starting with '0x' and 42 characters long.\n" \
+                   f"   Example: 0x742d35Cc6Bb1D6B7E6Cb0B5C7E8B8B9E8E0D8B9E"
+        
+        # Additional validation: check if address contains only hex characters
+        try:
+            int(wallet_address[2:], 16)  # Remove '0x' prefix and validate hex
+        except ValueError:
+            return f"❌ Invalid wallet address format. Address must contain only hexadecimal characters after '0x'."
+        
+        # Validate title and description
+        if not title or not title.strip():
+            return f"❌ Title is required. Please provide a descriptive title for your report."
+        
+        if not description or not description.strip():
+            return f"❌ Description is required. Please provide a detailed description of your report content."
+        
+        # Trim whitespace from title and description
+        title = title.strip()
+        description = description.strip()
+        
+        # Get the original report (we know it exists from verification)
+        original_report = PatientReportOperations.get_report_by_id(report_id)
+        
         # Anonymize the report content using ASI LLM
         try:
             anonymized_content = await anonymize_medical_text(original_report.report_content)
         except Exception as e:
             return f"❌ Failed to anonymize report: {str(e)}"
         
-        # Generate title if not provided
-        if not title:
-            title = f"Anonymous {original_report.report_type.title()} Report - {original_report.test_date.strftime('%Y-%m')}"
-        
         # Publish to marketplace
         published_report = PublishedReportOperations.publish_report(
             original_report_id=report_id,
             anonymized_content=anonymized_content,
             title=title,
+            price_eth=price_eth,
+            wallet_address=wallet_address,
             description=description,
             tags=tags
         )
         
-        return f"✅ Successfully authenticated and published report to marketplace!\n" \
+        return f"✅ Successfully published report to marketplace!\n" \
                f"👤 Authorized User: {patient_email}\n" \
                f"📋 Published ID: {published_report.id}\n" \
                f"📝 Title: {title}\n" \
                f"🏷️ Type: {original_report.report_type}\n" \
                f"📅 Test Date: {original_report.test_date.strftime('%Y-%m-%d')}\n" \
+               f"💰 Price: {price_eth} ETH\n" \
+               f"🏦 Payment Wallet: {wallet_address}\n" \
                f"🔒 Content has been fully anonymized and HIPAA compliant"
                
     except Exception as e:
         return f"❌ Failed to publish report: {str(e)}"
+
+@mcp.tool()
+async def publish_report(
+    report_id: str,
+    patient_email: str,
+    mpin: str,
+    price_eth: Optional[str] = None,
+    wallet_address: Optional[str] = None,
+    title: Optional[str] = None,
+    description: Optional[str] = None,
+    tags: Optional[str] = None
+) -> str:
+    """Publish a medical report by anonymizing it and adding to marketplace.
+    This function now redirects to the new two-step process for better user experience.
+    
+    Args:
+        report_id: Unique ID of the report in the patient_reports database
+        patient_email: Patient's email address for verification
+        mpin: Patient's Medical PIN for authentication
+        price_eth: Price in ETH for the report (REQUIRED - will prompt if not provided)
+        wallet_address: ETH wallet address for payments (REQUIRED - will prompt if not provided)
+        title: Title for the published report (REQUIRED - will prompt if not provided)
+        description: Description for the published report (REQUIRED - will prompt if not provided)
+        tags: Comma-separated tags for categorization (optional)
+    """
+    # Check if any required fields are missing, redirect to verification step
+    if not price_eth or not wallet_address or not title or not description:
+        return await verify_and_request_price(report_id, patient_email, mpin)
+    else:
+        # If all required fields are provided, proceed with publication
+        return await publish_report_with_price(report_id, patient_email, mpin, price_eth, wallet_address, title, description, tags)
 
 @mcp.tool()
 async def get_marketplace_reports(
@@ -282,6 +395,10 @@ async def get_marketplace_reports(
         for i, report in enumerate(reports, 1):
             result += f"{i}. **{report.title}**\n"
             result += f"   Type: {report.report_type} | Published: {report.published_at.strftime('%Y-%m-%d')}\n"
+            result += f"   💰 Price: {report.price_eth} ETH\n"
+            # Mask wallet address for privacy (show first 6 and last 4 characters)
+            masked_wallet = f"{report.wallet_address[:6]}...{report.wallet_address[-4:]}"
+            result += f"   🏦 Seller Wallet: {masked_wallet}\n"
             if report.description:
                 result += f"   Description: {report.description}\n"
             if report.tags:

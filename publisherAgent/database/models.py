@@ -29,4 +29,6 @@ class PublishedReport(Base):
     title = Column(String, nullable=False)
     description = Column(Text)
     tags = Column(String)  # JSON string of tags
+    price_eth = Column(String, nullable=False, default="0.000001")  # Price in ETH as string for precision
+    wallet_address = Column(String, nullable=False)  # ETH wallet address for payments
     is_active = Column(Boolean, default=True)

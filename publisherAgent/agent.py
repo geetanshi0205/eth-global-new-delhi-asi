@@ -6,7 +6,6 @@ import os
 
 load_dotenv()
 
-# Create an MCP adapter with your MCP server
 mcp_adapter = MCPServerAdapter(
     mcp_server=mcp,
     asi1_api_key=os.getenv("ASI1_API_KEY"),

@@ -8,7 +8,8 @@
       "Bash(pkill:*)",
       "Bash(psql:*)",
       "Bash(pip search:*)",
-      "Bash(pip uninstall:*)"
+      "Bash(pip uninstall:*)",
+      "Bash(rm:*)"
     ],
     "deny": [],
     "ask": []
