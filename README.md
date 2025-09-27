@@ -45,7 +45,7 @@ CareCrypt is powered by **five autonomous agents**:
 - Keeps both doctors and patients updated, ensuring a closed-loop workflow.  
 
 ### 4. 🛡 De-identification Agent  
-- Uses **ASI + Presidio** to strip sensitive identifiers.  
+- Uses **ASI** to strip sensitive identifiers.  
 - Ensures **HIPAA compliance** while retaining research value.  
 - Stores cleaned data in a secure backend.  
 
@@ -72,11 +72,9 @@ flowchart TD
 
 
 
-🛠 Tech Stack
+## 🛠 Tech Stack
 
 Fetch.ai uAgents — autonomous agent framework
-
-Presidio — HIPAA identifier removal
 
 ASI (SingularityNET) — only in De-identification Agent
 
@@ -84,7 +82,7 @@ Ethereum (x402 protocol) — secure payments & access control
 
 Superbase — backend storage (supporting layer)
 
-🌍 Impact
+## 🌍 Impact
 
 Patients: frustration-free, faster care navigation.
 
@@ -94,7 +92,7 @@ Researchers: privacy-preserving datasets for innovation.
 
 Ecosystem: health records become secure, research-ready assets.
 
-🛤 Roadmap
+## 🛤 Roadmap
 
 ✅ Core agents (Patient, Doctor, Lab, De-identification, Publisher)
 
@@ -106,13 +104,13 @@ Ecosystem: health records become secure, research-ready assets.
 
 🔄 Expanded data marketplace (future)
 
-📦 Project Status
+## 📦 Project Status
 
 Current: Prototype / Proof-of-Concept
 
 Built for ETH Hackathon (ASI Track, Fetch.ai ecosystem)
 
-🤝 Contributing
+## 🤝 Contributing
 
 Fork the repo
 
@@ -122,6 +120,6 @@ Commit changes
 
 Submit a PR
 
-📜 License
+## 📜 License
 
 Licensed under MIT License. See LICENSE for details.
