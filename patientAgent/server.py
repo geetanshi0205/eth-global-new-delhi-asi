@@ -10,8 +10,8 @@ from dotenv import load_dotenv
 
 # Import database components
 from database.operations import (
-    PatientOperations, AppointmentOperations, PrescriptionOperations, 
-    PatientDataManager, init_database
+    PatientOperations, AppointmentOperations, PrescriptionOperations,
+    PatientDataManager, ReportOperations, init_database
 )
 
 # Load environment variables from .env file
@@ -2302,6 +2302,62 @@ async def smart_patient_booking(
             pass
 
     return booking_result
+
+@mcp.tool()
+async def get_patient_reports(
+    patient_email: str,
+    report_type: Optional[str] = None,
+    test_date: Optional[str] = None
+) -> str:
+    """Retrieve patient reports from Supabase using email as entity identifier.
+
+    Args:
+        patient_email: Patient's email address (used as identifier)
+        report_type: Optional filter by report type (e.g., 'blood', 'xray', etc.)
+        test_date: Optional filter by test date in ISO format (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)
+    """
+    try:
+        # Parse test_date if provided
+        test_date_obj = None
+        if test_date:
+            try:
+                test_date_obj = datetime.fromisoformat(test_date)
+            except ValueError:
+                return "❌ Invalid date format. Please use YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS."
+
+        # Retrieve reports
+        reports = ReportOperations.get_patient_reports(
+            email=patient_email,
+            report_type=report_type,
+            test_date=test_date_obj
+        )
+
+        if not reports:
+            filters = []
+            if report_type:
+                filters.append(f"type: {report_type}")
+            if test_date:
+                filters.append(f"date: {test_date}")
+            filter_text = f" with filters ({', '.join(filters)})" if filters else ""
+            return f"❌ No reports found for {patient_email}{filter_text}"
+
+        # Format response
+        result = f"📋 Found {len(reports)} report(s) for {patient_email}:\n\n"
+        for i, report in enumerate(reports, 1):
+            result += f"{i}. **{report['report_type'].upper()}** ({report['report_date'][:10] if report['report_date'] else 'No date'})\n"
+            result += f"   Title: {report['title']}\n"
+            if report['description']:
+                result += f"   Description: {report['description']}\n"
+            result += f"   Status: {report['status']}\n"
+            if report['doctor_name']:
+                result += f"   Doctor: {report['doctor_name']}\n"
+            if report['is_critical']:
+                result += f"   🚨 **CRITICAL REPORT**\n"
+            result += f"   Created: {report['created_at'][:10] if report['created_at'] else 'Unknown'}\n\n"
+
+        return result.strip()
+    except Exception as e:
+        return f"❌ Failed to retrieve reports: {str(e)}"
 
 if __name__ == "__main__":
     # Initialize and run the server

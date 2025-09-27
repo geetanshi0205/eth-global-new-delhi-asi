@@ -3,7 +3,7 @@ from sqlalchemy import and_, or_, desc
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 from .db_config import get_db
-from .models import Patient, Appointment, Prescription
+from .models import Patient, Appointment, Prescription, Report
 
 class PatientOperations:
     
@@ -285,6 +285,118 @@ class PatientDataManager:
                     "phone": patient.phone
                 } for patient in patients
             ]
+        finally:
+            db.close()
+
+class ReportOperations:
+
+    @staticmethod
+    def get_patient_reports(email: str, report_type: Optional[str] = None,
+                           test_date: Optional[datetime] = None,
+                           include_pending: bool = True) -> List[Dict[str, Any]]:
+        """Get reports for a patient by email"""
+        db = get_db()
+        try:
+            patient = db.query(Patient).filter(Patient.email == email).first()
+            if not patient:
+                return []
+
+            query = db.query(Report).filter(Report.patient_id == patient.id)
+
+            if report_type:
+                query = query.filter(Report.report_type == report_type)
+
+            if test_date:
+                # Filter by test date (report_date field)
+                query = query.filter(Report.report_date == test_date.date())
+
+            if not include_pending:
+                query = query.filter(Report.status != "pending")
+
+            reports = query.order_by(desc(Report.report_date)).all()
+
+            return [
+                {
+                    "id": str(report.id),
+                    "title": report.title,
+                    "report_type": report.report_type,
+                    "description": report.description,
+                    "report_date": report.report_date.isoformat() if report.report_date else None,
+                    "doctor_name": report.doctor_name,
+                    "lab_name": report.lab_name,
+                    "status": report.status,
+                    "is_critical": report.is_critical,
+                    "file_url": report.file_url,
+                    "report_data": report.report_data,
+                    "created_at": report.created_at.isoformat() if report.created_at else None
+                } for report in reports
+            ]
+        finally:
+            db.close()
+
+    @staticmethod
+    def create_report(patient_email: str, title: str, report_type: str,
+                     report_date: datetime, **kwargs) -> Optional[Dict[str, Any]]:
+        """Create a new report for a patient"""
+        db = get_db()
+        try:
+            patient = db.query(Patient).filter(Patient.email == patient_email).first()
+            if not patient:
+                return None
+
+            report = Report(
+                patient_id=patient.id,
+                title=title,
+                report_type=report_type,
+                report_date=report_date,
+                description=kwargs.get('description'),
+                file_url=kwargs.get('file_url'),
+                report_data=kwargs.get('report_data'),
+                doctor_name=kwargs.get('doctor_name'),
+                lab_name=kwargs.get('lab_name'),
+                status=kwargs.get('status', 'available'),
+                is_critical=kwargs.get('is_critical', False),
+                appointment_id=kwargs.get('appointment_id')
+            )
+
+            db.add(report)
+            db.commit()
+            db.refresh(report)
+
+            return {
+                "id": str(report.id),
+                "title": report.title,
+                "report_type": report.report_type,
+                "status": report.status,
+                "created_at": report.created_at.isoformat()
+            }
+        finally:
+            db.close()
+
+    @staticmethod
+    def get_report_by_id(report_id: str) -> Optional[Dict[str, Any]]:
+        """Get a specific report by ID"""
+        db = get_db()
+        try:
+            report = db.query(Report).filter(Report.id == report_id).first()
+            if not report:
+                return None
+
+            return {
+                "id": str(report.id),
+                "title": report.title,
+                "report_type": report.report_type,
+                "description": report.description,
+                "report_date": report.report_date.isoformat() if report.report_date else None,
+                "doctor_name": report.doctor_name,
+                "lab_name": report.lab_name,
+                "status": report.status,
+                "is_critical": report.is_critical,
+                "file_url": report.file_url,
+                "report_data": report.report_data,
+                "patient_email": report.patient.email if report.patient else None,
+                "created_at": report.created_at.isoformat() if report.created_at else None
+            }
         finally:
             db.close()
 

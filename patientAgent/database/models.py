@@ -19,6 +19,7 @@ class Patient(Base):
     # Relationships
     appointments = relationship("Appointment", back_populates="patient")
     prescriptions = relationship("Prescription", back_populates="patient")
+    reports = relationship("Report", back_populates="patient")
 
 class Appointment(Base):
     __tablename__ = "appointments"
@@ -36,10 +37,11 @@ class Appointment(Base):
     # Relationships
     patient = relationship("Patient", back_populates="appointments")
     prescriptions = relationship("Prescription", back_populates="appointment")
+    reports = relationship("Report", back_populates="appointment")
 
 class Prescription(Base):
     __tablename__ = "prescriptions"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     patient_id = Column(UUID(as_uuid=True), ForeignKey("patients.id"), nullable=False)
     appointment_id = Column(UUID(as_uuid=True), ForeignKey("appointments.id"))
@@ -55,7 +57,30 @@ class Prescription(Base):
     prescribed_by = Column(String)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    
+
     # Relationships
     patient = relationship("Patient", back_populates="prescriptions")
     appointment = relationship("Appointment", back_populates="prescriptions")
+
+class Report(Base):
+    __tablename__ = "reports"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
+    patient_id = Column(UUID(as_uuid=True), ForeignKey("patients.id"), nullable=False)
+    appointment_id = Column(UUID(as_uuid=True), ForeignKey("appointments.id"))
+    report_type = Column(String, nullable=False)  # e.g., "lab_test", "imaging", "consultation"
+    title = Column(String, nullable=False)
+    description = Column(Text)
+    file_url = Column(String)  # URL to the report file if stored externally
+    report_data = Column(Text)  # JSON or text data of the report
+    report_date = Column(DateTime(timezone=True), nullable=False)
+    doctor_name = Column(String)
+    lab_name = Column(String)
+    status = Column(String, default="available")  # "pending", "available", "reviewed"
+    is_critical = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    patient = relationship("Patient", back_populates="reports")
+    appointment = relationship("Appointment", back_populates="reports")
