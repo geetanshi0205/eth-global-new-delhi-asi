@@ -1,7 +1,7 @@
 # 🏥 CareCrypt  
 
 **Secure. Smart. Patient-Centric.**  
-A decentralized healthcare ecosystem built on **Fetch.ai, ASI, and Ethereum**, automating care workflows while unlocking privacy-preserving medical data.  
+A decentralized healthcare ecosystem built on **Fetch.ai and Ethereum**, automating care workflows while unlocking privacy-preserving medical data.  
 
 ---
 
@@ -15,7 +15,7 @@ Healthcare today faces two big challenges:
 
 ## 💡 Solution Overview  
 
-CareCrypt leverages **Fetch.ai’s uAgents framework**, **ASI for de-identification**, and **Ethereum (x402 protocol)** to:  
+CareCrypt leverages **Fetch.ai's uAgents framework**, **ASI for de-identification**, and **Ethereum (x402 protocol)** to:  
 
 - Automate **appointments, prescriptions, and lab workflows**.  
 - Apply **ASI-powered de-identification (with Presidio)** to remove sensitive identifiers and make medical data research-ready.  
@@ -45,7 +45,7 @@ CareCrypt is powered by **five autonomous agents**:
 - Keeps both doctors and patients updated, ensuring a closed-loop workflow.  
 
 ### 4. 🛡 De-identification Agent  
-- Uses **ASI** to strip sensitive identifiers.  
+- Uses **ASI + Presidio** to strip sensitive identifiers.  
 - Ensures **HIPAA compliance** while retaining research value.  
 - Stores cleaned data in a secure backend.  
 
@@ -56,7 +56,7 @@ CareCrypt is powered by **five autonomous agents**:
 
 ---
 
-## 🏗 Architecture Diagram  
+## 🏗 Architecture Diagram
 
 ```mermaid
 flowchart TD
@@ -66,60 +66,76 @@ flowchart TD
     L -->|Results| P
     D -->|Prescription| P
 
-    P & D & L --> DA[De-identification Agent]
-    DA --> PA[Publisher Agent]
+    P & D & L --> DA[De-identification Agent ASI + Presidio]
+    DA --> PA[Publisher Agent x402]
     PA --> R[Researchers / Platforms]
+```
 
-
+---
 
 ## 🛠 Tech Stack
 
-Fetch.ai uAgents — autonomous agent framework
+| Technology | Purpose |
+|------------|---------|
+| **Fetch.ai uAgents** | Autonomous agent framework |
+| **Presidio** | HIPAA identifier removal |
+| **ASI (SingularityNET)** | De-identification AI processing |
+| **Ethereum (x402 protocol)** | Secure payments & access control |
+| **Supabase** | Backend storage |
 
-ASI (SingularityNET) — only in De-identification Agent
-
-Ethereum (x402 protocol) — secure payments & access control
-
-Superbase — backend storage (supporting layer)
+---
 
 ## 🌍 Impact
 
-Patients: frustration-free, faster care navigation.
+* **Patients**: Frustration-free, faster care navigation
+* **Doctors & Labs**: Unified scheduling, automated workflows  
+* **Researchers**: Privacy-preserving datasets for innovation
+* **Ecosystem**: Health records become secure, research-ready assets
 
-Doctors & Labs: unified scheduling, automated workflows.
-
-Researchers: privacy-preserving datasets for innovation.
-
-Ecosystem: health records become secure, research-ready assets.
+---
 
 ## 🛤 Roadmap
 
-✅ Core agents (Patient, Doctor, Lab, De-identification, Publisher)
+* ✅ Core agents (Patient, Doctor, Lab, De-identification, Publisher)
+* ✅ Payments via x402
+* 🔄 Monetization layer for patients/doctors (future)
+* 🔄 Telemedicine support in Doctor Agent (future)
+* 🔄 Expanded data marketplace (future)
 
-✅ Payments via x402
-
-🔄 Monetization layer for patients/doctors (future)
-
-🔄 Telemedicine support in Doctor Agent (future)
-
-🔄 Expanded data marketplace (future)
+---
 
 ## 📦 Project Status
 
-Current: Prototype / Proof-of-Concept
+**Current**: Prototype / Proof-of-Concept  
+**Built for**: ETH Hackathon (ASI Track, Fetch.ai ecosystem)
 
-Built for ETH Hackathon (ASI Track, Fetch.ai ecosystem)
+---
+
+## 🚀 Getting Started
+
+1. Clone the repository
+2. Install dependencies: `npm install`
+3. Configure your Fetch.ai wallet and API keys
+4. Run the agent network: `npm start`
+
+---
 
 ## 🤝 Contributing
 
-Fork the repo
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-Create a feature branch
-
-Commit changes
-
-Submit a PR
+---
 
 ## 📜 License
 
-Licensed under MIT License. See LICENSE for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+## 📞 Contact
+
+For questions or collaboration opportunities, reach out via [GitHub Issues](../../issues).
