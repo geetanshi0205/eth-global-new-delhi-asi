@@ -109,7 +109,6 @@ class PublishedReportOperations:
         anonymized_content: str, 
         title: str, 
         price_eth: str = "0.000001",
-        wallet_address: str = None,
         seller_wallet: str = None,
         description: str = None, 
         tags: str = None
@@ -129,7 +128,6 @@ class PublishedReportOperations:
                 test_date=original_report.test_date,
                 title=title,
                 price_eth=price_eth,
-                wallet_address=wallet_address,
                 seller_wallet=seller_wallet,
                 description=description,
                 tags=tags

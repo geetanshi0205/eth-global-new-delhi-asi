@@ -228,7 +228,7 @@ async def verify_and_request_price(
                f"   💡 Recommended: 0.000001 ETH (for testing) or set your own (e.g., 0.001, 0.01)\n\n" \
                f"4. 🏦 **Wallet Address**: Your ETH wallet address for receiving payments\n" \
                f"   Example: 0x742d35Cc6Bb1D6B7E6Cb0B5C7E8B8B9E8E0D8B9E\n\n" \
-               f"🔄 Next step: Use 'publish_report_with_price' with ALL required fields: title, description, price_eth, and wallet_address."
+               f"🔄 Next step: Use 'publish_report_with_price' with ALL required fields: title, description, price_eth, and seller_wallet."
                
     except Exception as e:
         return f"❌ Failed to verify access: {str(e)}"
@@ -239,7 +239,7 @@ async def publish_report_with_price(
     patient_email: str,
     mpin: str,
     price_eth: str,
-    wallet_address: str,
+    seller_wallet: str,
     title: str,
     description: str,
     tags: Optional[str] = None
@@ -252,7 +252,7 @@ async def publish_report_with_price(
         patient_email: Patient's email address for verification
         mpin: Patient's Medical PIN for authentication
         price_eth: Price in ETH for the report (REQUIRED - user must specify)
-        wallet_address: ETH wallet address for receiving payments (REQUIRED)
+        seller_wallet: ETH wallet address for receiving payments (REQUIRED)
         title: Title for the published report (REQUIRED - user must provide)
         description: Description for the published report (REQUIRED - user must provide)
         tags: Comma-separated tags for categorization (optional)
@@ -277,13 +277,13 @@ async def publish_report_with_price(
             return f"❌ Invalid price format. Please provide a valid number for price_eth (e.g., '0.000001')"
         
         # Validate wallet address format (basic ETH address validation)
-        if not wallet_address or not wallet_address.startswith('0x') or len(wallet_address) != 42:
+        if not seller_wallet or not seller_wallet.startswith('0x') or len(seller_wallet) != 42:
             return f"❌ Invalid wallet address. Please provide a valid ETH wallet address starting with '0x' and 42 characters long.\n" \
                    f"   Example: 0x742d35Cc6Bb1D6B7E6Cb0B5C7E8B8B9E8E0D8B9E"
         
         # Additional validation: check if address contains only hex characters
         try:
-            int(wallet_address[2:], 16)  # Remove '0x' prefix and validate hex
+            int(seller_wallet[2:], 16)  # Remove '0x' prefix and validate hex
         except ValueError:
             return f"❌ Invalid wallet address format. Address must contain only hexadecimal characters after '0x'."
         
@@ -313,8 +313,7 @@ async def publish_report_with_price(
             anonymized_content=anonymized_content,
             title=title,
             price_eth=price_eth,
-            wallet_address=wallet_address,
-            seller_wallet=wallet_address,  # Use same wallet address for seller
+            seller_wallet=seller_wallet,
             description=description,
             tags=tags
         )
@@ -326,7 +325,7 @@ async def publish_report_with_price(
                f"🏷️ Type: {original_report.report_type}\n" \
                f"📅 Test Date: {original_report.test_date.strftime('%Y-%m-%d')}\n" \
                f"💰 Price: {price_eth} ETH\n" \
-               f"🏦 Payment Wallet: {wallet_address}\n" \
+               f"🏦 Payment Wallet: {seller_wallet}\n" \
                f"🔒 Content has been fully anonymized and HIPAA compliant"
                
     except Exception as e:
@@ -338,7 +337,7 @@ async def publish_report(
     patient_email: str,
     mpin: str,
     price_eth: Optional[str] = None,
-    wallet_address: Optional[str] = None,
+    seller_wallet: Optional[str] = None,
     title: Optional[str] = None,
     description: Optional[str] = None,
     tags: Optional[str] = None
@@ -351,17 +350,17 @@ async def publish_report(
         patient_email: Patient's email address for verification
         mpin: Patient's Medical PIN for authentication
         price_eth: Price in ETH for the report (REQUIRED - will prompt if not provided)
-        wallet_address: ETH wallet address for payments (REQUIRED - will prompt if not provided)
+        seller_wallet: ETH wallet address for payments (REQUIRED - will prompt if not provided)
         title: Title for the published report (REQUIRED - will prompt if not provided)
         description: Description for the published report (REQUIRED - will prompt if not provided)
         tags: Comma-separated tags for categorization (optional)
     """
     # Check if any required fields are missing, redirect to verification step
-    if not price_eth or not wallet_address or not title or not description:
+    if not price_eth or not seller_wallet or not title or not description:
         return await verify_and_request_price(report_id, patient_email, mpin)
     else:
         # If all required fields are provided, proceed with publication
-        return await publish_report_with_price(report_id, patient_email, mpin, price_eth, wallet_address, title, description, tags)
+        return await publish_report_with_price(report_id, patient_email, mpin, price_eth, seller_wallet, title, description, tags)
 
 @mcp.tool()
 async def get_marketplace_reports(
@@ -398,7 +397,7 @@ async def get_marketplace_reports(
             result += f"   Type: {report.report_type} | Published: {report.published_at.strftime('%Y-%m-%d')}\n"
             result += f"   💰 Price: {report.price_eth} ETH\n"
             # Mask wallet address for privacy (show first 6 and last 4 characters)
-            masked_wallet = f"{report.wallet_address[:6]}...{report.wallet_address[-4:]}"
+            masked_wallet = f"{report.seller_wallet[:6]}...{report.seller_wallet[-4:]}"
             result += f"   🏦 Seller Wallet: {masked_wallet}\n"
             if report.description:
                 result += f"   Description: {report.description}\n"
