@@ -1,0 +1,7 @@
+uagents
+fastmcp
+httpx
+python-dotenv
+openai
+psycopg2-binary
+sqlalchemy
