@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:cal.com)",
+      "Bash(python:*)",
+      "Bash(pip show:*)",
+      "Bash(pip install:*)",
+      "Bash(pkill:*)",
+      "Bash(psql:*)",
+      "Bash(pip search:*)",
+      "Bash(pip uninstall:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
