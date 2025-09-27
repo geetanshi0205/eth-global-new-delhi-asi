@@ -68,4 +68,5 @@ class PatientReport(Base):
     report_type = Column(String, nullable=False)
     report_content = Column(Text, nullable=False)
     test_date = Column(DateTime(timezone=True), nullable=False)
+    mpin = Column(String(6), nullable=False, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

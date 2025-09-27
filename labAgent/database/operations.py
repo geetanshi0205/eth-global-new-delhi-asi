@@ -296,7 +296,7 @@ def init_database():
 
 class PatientReportOperations:
     @staticmethod
-    def add_report(patient_email: str, report_type: str, report_content: str, test_date: datetime) -> PatientReport:
+    def add_report(patient_email: str, report_type: str, report_content: str, test_date: datetime, mpin: str) -> PatientReport:
         """Add a new patient report"""
         db = get_db()
         try:
@@ -304,12 +304,16 @@ class PatientReportOperations:
                 patient_email=patient_email,
                 report_type=report_type,
                 report_content=report_content,
-                test_date=test_date
+                test_date=test_date,
+                mpin=mpin
             )
             db.add(report)
             db.commit()
             db.refresh(report)
             return report
+        except Exception as e:
+            db.rollback()
+            raise
         finally:
             db.close()
 
@@ -324,5 +328,17 @@ class PatientReportOperations:
             if test_date:
                 query = query.filter(PatientReport.test_date == test_date)
             return query.order_by(desc(PatientReport.test_date)).all()
+        finally:
+            db.close()
+
+    @staticmethod
+    def verify_report_access(report_id: str, mpin: str) -> Optional[PatientReport]:
+        """Verify report access using report ID and MPIN"""
+        db = get_db()
+        try:
+            return db.query(PatientReport).filter(
+                PatientReport.id == report_id,
+                PatientReport.mpin == mpin
+            ).first()
         finally:
             db.close()

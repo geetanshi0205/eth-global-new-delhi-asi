@@ -5,3 +5,5 @@ python-dotenv
 openai
 psycopg2-binary
 sqlalchemy
+smtplib
+email-validator
