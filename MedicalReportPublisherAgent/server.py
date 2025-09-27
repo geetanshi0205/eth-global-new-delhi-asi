@@ -314,6 +314,7 @@ async def publish_report_with_price(
             title=title,
             price_eth=price_eth,
             wallet_address=wallet_address,
+            seller_wallet=wallet_address,  # Use same wallet address for seller
             description=description,
             tags=tags
         )

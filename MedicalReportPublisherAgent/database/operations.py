@@ -110,6 +110,7 @@ class PublishedReportOperations:
         title: str, 
         price_eth: str = "0.000001",
         wallet_address: str = None,
+        seller_wallet: str = None,
         description: str = None, 
         tags: str = None
     ) -> PublishedReport:
@@ -129,6 +130,7 @@ class PublishedReportOperations:
                 title=title,
                 price_eth=price_eth,
                 wallet_address=wallet_address,
+                seller_wallet=seller_wallet,
                 description=description,
                 tags=tags
             )
