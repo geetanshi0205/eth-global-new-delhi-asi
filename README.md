@@ -1,141 +1,174 @@
 # 🏥 CareCrypt  
 
 **Secure. Smart. Patient-Centric.**  
-A decentralized healthcare ecosystem built on **Fetch.ai and Ethereum**, automating care workflows while unlocking privacy-preserving medical data.  
+A decentralized healthcare ecosystem built on **Fetch.ai and Ethereum**, automating care workflows while enabling privacy-preserving medical data research.
 
 ---
 
-## 🔍 Problem & Motivation  
+## 🔍 The Problem  
 
-Healthcare today faces two big challenges:  
-1. **Inefficient appointments & communication** — delays, scattered lab bookings, and manual coordination frustrate patients and providers.  
-2. **Underutilized patient data** — health records remain siloed, with little value unlocked for research due to privacy concerns.  
-
----
-
-## 💡 Solution Overview  
-
-CareCrypt leverages **Fetch.ai's uAgents framework**, **ASI for de-identification**, and **Ethereum (x402 protocol)** to:  
-
-- Automate **appointments, prescriptions, and lab workflows**.  
-- Apply **ASI-powered de-identification (with Presidio)** to remove sensitive identifiers and make medical data research-ready.  
-- Enable **secure, traceable payments** for dataset access via **x402**.  
-- Deliver **anonymized datasets** to researchers and healthcare platforms without compromising privacy.  
+Healthcare today suffers from:
+- **Fragmented workflows** — scattered appointments, manual coordination, and communication delays
+- **Underutilized patient data** — valuable health records remain siloed due to privacy concerns, limiting medical research
 
 ---
 
-## 🤖 Agents & System Flow  
+## 💡 Our Solution  
 
-CareCrypt is powered by **five autonomous agents**:  
+CareCrypt leverages **Fetch.ai's uAgents framework**, **ASI-powered de-identification**, and **Ethereum's x402 protocol** to create a unified healthcare ecosystem that:
 
-### 1. 🧑‍⚕️ Patient Agent  
-- First contact point for patients.  
-- Uses a **knowledge graph** to answer symptom queries.  
-- Books doctor appointments or lab tests.  
-- Provides a guided, frustration-free patient journey.  
-
-### 2. 👨‍💼 Doctor Agent  
-- Manages **scheduling** and **prescription issuance**.  
-- Syncs with patients and labs for coordination.  
-- Automates routine workflows for efficiency.  
-
-### 3. 🔬 Lab Agent  
-- Books and manages **lab test appointments**.  
-- Securely delivers **results via Fetch.ai network**.  
-- Keeps both doctors and patients updated, ensuring a closed-loop workflow.  
-
-### 4. 🛡 De-identification Agent  
-- Uses **ASI + Presidio** to strip sensitive identifiers.  
-- Ensures **HIPAA compliance** while retaining research value.  
-- Stores cleaned data in a secure backend.  
-
-### 5. 💰 Publisher Agent  
-- Manages **data access, authorization, and payments**.  
-- Uses **x402 protocol** for secure, auditable transactions.  
-- Provides researchers with **traceable, anonymized datasets**.  
+✅ **Automates** appointments, prescriptions, and lab workflows  
+✅ **De-identifies** medical data using ASI and Presidio for HIPAA compliance  
+✅ **Enables** secure, traceable payments for dataset access  
+✅ **Delivers** privacy-preserving datasets to researchers  
 
 ---
 
-## 🏗 Architecture Diagram
+## 🤖 Autonomous Agent Network  
+
+### 🧑‍⚕️ Patient Agent  
+**Your healthcare navigator**
+- Symptom assessment using SingularityNET knowledge graphs
+- Automated appointment booking
+- Seamless care coordination
+- *Address: `agent1qveeyurxp6g3wuuacpm3f5mhjn74mg280eqskkt9tpdpsxx24c8rk32nqru`*
+
+### 👨‍⚕️ Doctor Agent  
+**Clinical workflow automation**
+- Intelligent scheduling management
+- Digital prescription issuance
+- Patient-lab coordination
+- *Address: `agent1qdnhgml8q77qluk98gezsuq65h68e5swfws8hts7686cca3psej8wfw9j94`*
+
+### 🔬 Lab Agent  
+**Laboratory operations**
+- Test appointment scheduling
+- Secure result delivery
+- Real-time status updates
+- *Address: `agent1qvw20wl8v6g0zxae6pcd8qeufzd3u0ehmvt6dzuqtmm7xj60qtpacfuhypy`*
+
+### 🛡️ De-identification Agent
+**Privacy protection**
+- ASI-powered data anonymization
+- HIPAA compliance enforcement
+- Medical data preparation for research
+- *Address: `agent1qtr3a8fmq5slh0w0ju38ptrrzqzqr3xrrcjj2jkmfc62jlde4vmkcvxyx2d`*
+
+### 💰 Marketplace Agent 
+**Data monetization**
+- Secure dataset access control
+- x402 protocol payment processing
+- Research platform integration
+- *Address: `agent1qv6k5kj9535a3yaxuy2zlzk2z2jl844mvneej2mrdmzs82kup3czcdp0vp7`*
+
+---
+
+## 🏗️ System Architecture
 
 ```mermaid
 flowchart TD
-    P[Patient Agent] -->|Book| D[Doctor Agent]
-    P -->|Book| L[Lab Agent]
-    L -->|Results| D
-    L -->|Results| P
-    D -->|Prescription| P
+    PA[Patient Agent] -->|Books Appointments| DA[Doctor Agent]
+    PA -->|Schedules Tests| LA[Lab Agent]
+    LA -->|Delivers Results| DA
+    LA -->|Updates Status| PA
+    DA -->|Issues Prescriptions| PA
 
-    P & D & L --> DA[De-identification Agent ASI + Presidio]
-    DA --> PA[Publisher Agent x402]
-    PA --> R[Researchers / Platforms]
+    PA & DA & LA -->|Medical Data| DIA[De-identification Agent]
+    DIA -->|Anonymized Data| MA[Marketplace Agent]
+    MA -->|Secure Access| R[Researchers & Platforms]
+
+    style PA fill:#e1f5fe
+    style DA fill:#f3e5f5
+    style LA fill:#e8f5e8
+    style DIA fill:#fff3e0
+    style MA fill:#fce4ec
 ```
 
 ---
 
-## 🛠 Tech Stack
+## 🛠️ Technology Stack
 
-| Technology | Purpose |
-|------------|---------|
-| **Fetch.ai uAgents** | Autonomous agent framework |
-| **Presidio** | HIPAA identifier removal |
-| **ASI (SingularityNET)** | De-identification AI processing |
-| **Ethereum (x402 protocol)** | Secure payments & access control |
-| **Supabase** | Backend storage |
-
----
-
-## 🌍 Impact
-
-* **Patients**: Frustration-free, faster care navigation
-* **Doctors & Labs**: Unified scheduling, automated workflows  
-* **Researchers**: Privacy-preserving datasets for innovation
-* **Ecosystem**: Health records become secure, research-ready assets
+| **Component** | **Technology** | **Purpose** |
+|---------------|----------------|-------------|
+| **Agent Framework** | Fetch.ai uAgents | Autonomous agent orchestration |
+| **AI Processing** | ASI (SingularityNET) | Intelligent de-identification |
+| **Privacy Engine** | Microsoft Presidio | HIPAA identifier removal |
+| **Payment Layer** | Ethereum x402 | Secure transactions & access control |
+| **Data Storage** | Supabase | Scalable backend infrastructure |
 
 ---
 
-## 🛤 Roadmap
+## 🌟 Impact & Benefits
 
-* ✅ Core agents (Patient, Doctor, Lab, De-identification, Publisher)
-* ✅ Payments via x402
-* 🔄 Monetization layer for patients/doctors (future)
-* 🔄 Telemedicine support in Doctor Agent (future)
-* 🔄 Expanded data marketplace (future)
+**For Patients**  
+Streamlined care navigation with automated scheduling and real-time updates
 
----
+**For Healthcare Providers**  
+Unified workflows, reduced administrative overhead, and improved coordination
 
-## 📦 Project Status
+**For Researchers**  
+Access to privacy-compliant datasets enabling medical breakthroughs
 
-**Current**: Prototype / Proof-of-Concept  
-**Built for**: ETH Hackathon (ASI Track, Fetch.ai ecosystem)
+**For the Ecosystem**  
+Transformation of health records into secure, research-ready digital assets
 
 ---
 
 ## 🚀 Getting Started
 
-1. Clone the repository
-2. Install dependencies: `npm install`
-3. Configure your Fetch.ai wallet and API keys
-4. Run the agent network: `npm start`
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/carecrypt
+cd carecrypt
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Configure your agents
+# 1. Update the seed phrase in each agent file for unique addresses
+# 2. Configure your Fetch.ai wallet and API keys in .env
+
+# Start each agent individually
+python patient_agent.py
+python doctor_agent.py  
+python lab_agent.py
+python deidentification_agent.py
+python marketplace_agent.py
+
+# Run the main server (in a separate terminal)
+python server.py
+```
+
+**Note**: Each agent runs independently. Start them in separate terminal windows for optimal performance.
+
+---
+
+## 📈 Project Status
+
+**Current Phase**: Prototype / Proof-of-Concept  
+**Built For**: ETH Hackathon (ASI Track, Fetch.ai Ecosystem)  
+**Next Steps**: Production deployment and ecosystem expansion
 
 ---
 
 ## 🤝 Contributing
 
+We welcome contributions! Please follow these steps:
+
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
 3. Commit your changes (`git commit -m 'Add amazing feature'`)
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
 ---
 
-## 📜 License
+## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
 
 ---
 
-## 📞 Contact
+## 📬 Contact
 
-For questions or collaboration opportunities, reach out via [GitHub Issues](../../issues).
+Questions or collaboration opportunities? Reach out via [GitHub Issues](../../issues) or connect with our team.
