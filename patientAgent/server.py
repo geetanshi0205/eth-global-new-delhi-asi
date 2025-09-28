@@ -2671,6 +2671,55 @@ async def add_prescription(
         return f"❌ **Error adding prescription**: {str(e)}"
 
 @mcp.tool()
+async def get_patient_prescriptions(
+    patient_email: str,
+    active_only: bool = True
+) -> str:
+    """Retrieve prescriptions for a patient using email as identifier.
+    
+    Args:
+        patient_email: Patient's email address (used as identifier)
+        active_only: If True, only return active prescriptions (default: True)
+    """
+    try:
+        prescriptions = PatientOperations.get_patient_prescriptions(
+            email=patient_email,
+            active_only=active_only
+        )
+        
+        if not prescriptions:
+            status_text = "active" if active_only else "all"
+            return f"💊 No {status_text} prescriptions found for {patient_email}"
+        
+        # Format response
+        status_text = "active" if active_only else "all"
+        result = f"💊 Found {len(prescriptions)} {status_text} prescription(s) for {patient_email}:\n\n"
+        
+        for i, prescription in enumerate(prescriptions, 1):
+            result += f"{i}. **{prescription.medication_name}**\n"
+            result += f"   Dosage: {prescription.dosage}\n"
+            result += f"   Frequency: {prescription.frequency}\n"
+            if prescription.duration:
+                result += f"   Duration: {prescription.duration}\n"
+            if prescription.instructions:
+                result += f"   Instructions: {prescription.instructions}\n"
+            if prescription.prescribed_by:
+                result += f"   Prescribed by: {prescription.prescribed_by}\n"
+            if prescription.start_date:
+                result += f"   Start date: {prescription.start_date.strftime('%Y-%m-%d')}\n"
+            if prescription.end_date:
+                result += f"   End date: {prescription.end_date.strftime('%Y-%m-%d')}\n"
+            if prescription.refills_remaining is not None:
+                result += f"   Refills remaining: {prescription.refills_remaining}\n"
+            result += f"   Status: {'Active' if prescription.is_active else 'Inactive'}\n"
+            result += f"   Created: {prescription.created_at.strftime('%Y-%m-%d %H:%M')}\n\n"
+        
+        return result
+        
+    except Exception as e:
+        return f"❌ **Error retrieving prescriptions**: {str(e)}"
+
+@mcp.tool()
 async def search_patients(query: str) -> str:
     """Search for patients by name or email.
     

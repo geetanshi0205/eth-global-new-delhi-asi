@@ -1,9 +1,32 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_, desc
+from sqlalchemy.exc import OperationalError, DisconnectionError
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
+import time
+import random
 from .db_config import get_db
 from .models import Patient, Appointment, Prescription, PatientReport
+
+def retry_db_operation(max_retries=3, base_delay=1):
+    """Decorator to retry database operations on connection failures"""
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            for attempt in range(max_retries):
+                try:
+                    return func(*args, **kwargs)
+                except (OperationalError, DisconnectionError) as e:
+                    if attempt == max_retries - 1:
+                        raise e
+                    # Exponential backoff with jitter
+                    delay = base_delay * (2 ** attempt) + random.uniform(0, 1)
+                    time.sleep(delay)
+                except Exception as e:
+                    # Don't retry other types of exceptions
+                    raise e
+            return None
+        return wrapper
+    return decorator
 
 class PatientOperations:
     
@@ -296,6 +319,7 @@ def init_database():
 
 class PatientReportOperations:
     @staticmethod
+    @retry_db_operation(max_retries=3, base_delay=1)
     def add_report(patient_email: str, report_type: str, report_content: str, test_date: datetime, mpin: str) -> PatientReport:
         """Add a new patient report"""
         db = get_db()
@@ -318,6 +342,7 @@ class PatientReportOperations:
             db.close()
 
     @staticmethod
+    @retry_db_operation(max_retries=3, base_delay=1)
     def get_reports(patient_email: str, report_type: Optional[str] = None, test_date: Optional[datetime] = None) -> List[PatientReport]:
         """Retrieve patient reports by email, optionally filtered by type and date"""
         db = get_db()
@@ -332,6 +357,7 @@ class PatientReportOperations:
             db.close()
 
     @staticmethod
+    @retry_db_operation(max_retries=3, base_delay=1)
     def verify_report_access(report_id: str, mpin: str) -> Optional[PatientReport]:
         """Verify report access using report ID and MPIN"""
         db = get_db()

@@ -1,9 +1,27 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
+from sqlalchemy.exc import OperationalError, TimeoutError
 from typing import List, Optional
 from datetime import datetime
+import time
+import logging
 from .db_config import get_db
 from .models import PatientReport, PublishedReport
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+def retry_db_operation(func, max_retries=3, delay=1):
+    """Retry database operation with exponential backoff"""
+    for attempt in range(max_retries):
+        try:
+            return func()
+        except (OperationalError, TimeoutError) as e:
+            if attempt == max_retries - 1:
+                logger.error(f"Database operation failed after {max_retries} attempts: {e}")
+                raise
+            logger.warning(f"Database operation failed (attempt {attempt + 1}/{max_retries}): {e}")
+            time.sleep(delay * (2 ** attempt))
 
 def init_database():
     """Initialize database with tables"""
@@ -146,19 +164,22 @@ class PublishedReportOperations:
     def get_published_reports(
         report_type: Optional[str] = None, 
         tags: Optional[str] = None, 
-        limit: int = 50
+        limit: int = 20
     ) -> List[PublishedReport]:
         """Get published reports from marketplace"""
-        db = get_db()
-        try:
-            query = db.query(PublishedReport).filter(PublishedReport.is_active == True)
-            if report_type:
-                query = query.filter(PublishedReport.report_type == report_type)
-            if tags:
-                query = query.filter(PublishedReport.tags.contains(tags))
-            return query.order_by(desc(PublishedReport.published_at)).limit(limit).all()
-        finally:
-            db.close()
+        def _get_reports():
+            db = get_db()
+            try:
+                query = db.query(PublishedReport).filter(PublishedReport.is_active == True)
+                if report_type:
+                    query = query.filter(PublishedReport.report_type == report_type)
+                if tags:
+                    query = query.filter(PublishedReport.tags.contains(tags))
+                return query.order_by(desc(PublishedReport.published_at)).limit(limit).all()
+            finally:
+                db.close()
+        
+        return retry_db_operation(_get_reports)
 
     @staticmethod
     def get_published_report_by_id(report_id: str) -> Optional[PublishedReport]:

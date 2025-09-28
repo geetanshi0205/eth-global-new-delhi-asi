@@ -13,7 +13,7 @@ mcp_adapter = MCPServerAdapter(
     model="asi1-mini"
 )
 
-agent = Agent(name="Medical Data Marketplace Agent", port=8000, seed="Medical Data Marketplace Agent ETHGlobal New Delhi", mailbox=True, publish_agent_details=True)
+agent = Agent(name="Medical Data Marketplace Agent", port=8004, seed="Medical Data Marketplace Agent ETHGlobal New Delhi", mailbox=True, publish_agent_details=True)
 
 for protocol in mcp_adapter.protocols:
     agent.include(protocol, publish_manifest=True)

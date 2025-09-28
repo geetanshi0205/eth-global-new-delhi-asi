@@ -4,7 +4,9 @@
       "Bash(python test:*)",
       "Bash(python3 test_buyer_agent.py:*)",
       "Bash(python3:*)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(pg_isready:*)",
+      "Bash(ping:*)"
     ],
     "deny": [],
     "ask": []

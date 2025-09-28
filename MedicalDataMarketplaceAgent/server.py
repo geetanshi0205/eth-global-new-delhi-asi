@@ -518,15 +518,15 @@ async def buy_data_by_id(report_id: str) -> str:
             return f"❌ X402 Payment failed: {str(e)}"
         
         # Payment successful, return the anonymized content
-        result = f"✅ **Purchase Successful via X402 Protocol!**\n\n"
-        result += f"💳 **Transaction Hash:** {tx_hash}\n"
-        result += f"💰 **Amount Paid:** {report.price_eth} ETH\n"
-        result += f"👤 **Paid to:** {report.seller_wallet}\n"
-        result += f"📋 **Data Title:** {report.title}\n"
-        result += f"📊 **Type:** {report.report_type}\n\n"
-        result += f"📄 **Your Purchased Data:**\n"
-        result += f"```\n{report.anonymized_content}\n```\n\n"
-        result += f"🎉 **Thank you for your purchase!**"
+        result = f"Great! ✅ The purchase was successful via the X402 Protocol.\n\n"
+        result += f"Here's a summary of your transaction:\n\n"
+        result += f"📋 Data Title: {report.title}\n"
+        result += f"💰 Amount Paid: {report.price_eth} ETH\n"
+        result += f"👤 Paid to: {report.seller_wallet}\n"
+        result += f"📊 Type: {report.report_type}\n"
+        result += f"💳 Transaction Hash: {tx_hash}\n"
+        result += f"📄 Data Content: {report.anonymized_content}\n\n"
+        result += f"Let me know if you'd like help analyzing or interpreting the data! 😊"
         
         return result
     except Exception as e:
