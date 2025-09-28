@@ -92,7 +92,6 @@ flowchart TD
 |---------------|----------------|-------------|
 | **Agent Framework** | Fetch.ai uAgents | Autonomous agent orchestration |
 | **AI Processing** | ASI (SingularityNET) | Intelligent de-identification |
-| **Privacy Engine** | Microsoft Presidio | HIPAA identifier removal |
 | **Payment Layer** | Ethereum x402 | Secure transactions & access control |
 | **Data Storage** | Supabase | Scalable backend infrastructure |
 
